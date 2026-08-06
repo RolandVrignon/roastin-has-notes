@@ -4,7 +4,7 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 0.9 |
+| Version | 1.0 |
 | Dernière mise à jour | 6 août 2026 |
 | Statut | Brainstorming produit — aucun développement engagé |
 | Référence fonctionnelle | [What Brandon Thinks](https://www.whatbrandonthinks.com/) |
@@ -40,7 +40,10 @@ La formulation définitive dépendra du nom et de la personnalité éditoriale c
 - Aucun prix affiché pendant l'onboarding.
 - Le prix est révélé uniquement après un aperçu personnalisé du rapport.
 - Paiement unique, sans abonnement dans le MVP.
+- Stripe Checkout est le prestataire de paiement du MVP.
 - Rapport complet déverrouillé sur la même URL après paiement.
+- Après paiement, l'utilisateur peut demander la livraison du roast sur son propre WhatsApp.
+- La livraison WhatsApp est facultative, explicite et distincte du partage au groupe.
 - Partage au cœur de la boucle d'acquisition.
 - La conversation brute n'est jamais conservée après génération.
 - Le rapport dérivé est privé, supprimable et géré séparément.
@@ -74,6 +77,8 @@ La formulation définitive dépendra du nom et de la personnalité éditoriale c
 4. Le contenu s'interrompt à un moment éditorial fort.
 5. Le paywall révèle pour la première fois le prix.
 6. Le paiement débloque immédiatement le rapport complet.
+7. L'utilisateur choisit s'il souhaite aussi recevoir le roast sur WhatsApp.
+8. Le produit lui envoie un message transactionnel avec un lien privé vers le rapport.
 
 ### Offre envisagée
 
@@ -1335,13 +1340,49 @@ CTA :
 
 ### Paiement
 
-- Stripe Checkout ou expérience équivalente.
+- Stripe Checkout avec la Checkout Sessions API en mode `payment`.
+- Checkout hébergé par Stripe pour le MVP afin de réduire la surface PCI et le temps d'intégration.
 - Prix et devise localisés.
-- Taxes affichées selon le pays.
-- Retour sur la même URL.
-- Déverrouillage après vérification serveur du paiement.
-- Traitement idempotent des webhooks.
-- Gestion du paiement réussi avec webhook retardé.
+- Méthodes de paiement dynamiques pilotées depuis Stripe ; aucune liste de cartes ou de wallets codée en dur.
+- Retour sur la même URL de rapport via une `success_url` contenant uniquement l'identifiant de Checkout nécessaire à la réconciliation.
+- Déverrouillage uniquement après lecture serveur de la Checkout Session et confirmation que son `payment_status` vaut `paid`.
+- Le retour navigateur tente le fulfillment immédiatement pour une bonne UX, sans remplacer le webhook qui reste obligatoire.
+
+### Création de la Checkout Session
+
+- La session est créée côté serveur pour un rapport précis et une offre précise.
+- Le navigateur ne fournit jamais librement le montant, la devise ou le `price_id` faisant foi.
+- Les prix Stripe sont configurés par offre, marché et devise ; le serveur sélectionne le prix depuis une table autorisée.
+- Les métadonnées Stripe contiennent uniquement des identifiants internes opaques tels que `reportId` et `offerCode`.
+- Aucun message, citation, nom de participant, numéro WhatsApp ou contenu du rapport ne figure dans les métadonnées Stripe.
+- La session utilise un `integration_identifier` propre au flux lorsque la version d'API retenue l'exige.
+- Le MVP ne sauvegarde pas de moyen de paiement pour une utilisation future.
+
+### Taxes et facture
+
+- Le prix final et les taxes éventuelles sont visibles dans Checkout avant confirmation.
+- Stripe Tax ne peut être activé qu'après validation des obligations fiscales et création des registrations nécessaires dans les juridictions concernées.
+- Tant que ce cadrage n'est pas terminé, le brief ne promet ni calcul automatique ni collecte automatique de taxes.
+- L'email de reçu Stripe peut servir de justificatif simple ; le besoin d'une facture conforme par marché reste à valider juridiquement.
+
+### Fulfillment et webhooks
+
+- Événements minimum : `checkout.session.completed`, `checkout.session.async_payment_succeeded` et `checkout.session.async_payment_failed`.
+- Signature Stripe vérifiée sur le corps brut de chaque webhook.
+- Chaque `event.id` Stripe est enregistré afin d'ignorer les redéliveries.
+- Le fulfillment est idempotent et sûr en cas d'appels concurrents depuis le webhook et la page de retour.
+- Une contrainte unique lie une Checkout Session à un seul achat et un seul entitlement de rapport.
+- La transaction applicative enregistre le paiement, crée l'entitlement et marque le rapport comme déverrouillé de manière atomique.
+- Un paiement différé reste dans un état `PROCESSING` tant que Stripe n'a pas confirmé son succès.
+- Un échec ou une expiration de Checkout ne déverrouille jamais le rapport.
+
+### Sécurité Stripe
+
+- Clé restreinte Stripe avec le minimum de permissions, distincte par environnement.
+- Secrets Stripe stockés dans le gestionnaire de secrets ou dans les variables d'environnement non versionnées du serveur.
+- Clé secrète, clé restreinte et secret de webhook interdits dans le navigateur, les logs et les erreurs publiques.
+- Version de l'API Stripe et SDK épinglés explicitement au démarrage de l'implémentation.
+- Références de conception : [Checkout Sessions](https://docs.stripe.com/payments/checkout/how-checkout-works), [fulfillment](https://docs.stripe.com/checkout/fulfillment) et [sécurité des webhooks](https://docs.stripe.com/webhooks#verify-events).
 
 ## 14. Partage
 
@@ -1355,6 +1396,52 @@ CTA :
 Texte de travail :
 
 > The AI analyzed our chat and this is way too accurate 😭
+
+### Livraison WhatsApp après paiement
+
+WhatsApp est à la fois un canal d'acquisition par l'import et un canal de livraison après achat. Le parcours cible est :
+
+1. Le paiement est confirmé côté serveur.
+2. Le rapport est déverrouillé sur le web.
+3. L'utilisateur coche `Send my roast to WhatsApp` ou déclenche l'action depuis le rapport.
+4. Il renseigne ou confirme son propre numéro au format international.
+5. Il accepte explicitement de recevoir ce message transactionnel sur WhatsApp.
+6. Le produit envoie un template WhatsApp approuvé contenant un lien privé vers le roast.
+7. Le statut `sent`, `delivered`, `read` ou `failed` est mis à jour par webhook.
+
+Contenu recommandé du message :
+
+> Roastin has notes. Your full roast is ready: {private_link}
+
+Règles :
+
+- Utiliser l'API officielle WhatsApp Business Platform Cloud API, sans automatisation de WhatsApp Web.
+- Soumettre un template transactionnel localisé dans chaque langue du lancement ; sa catégorie finale et son approbation restent décidées par Meta.
+- Ne pas dépendre d'une fenêtre de conversation ouverte pour assurer la livraison initiale.
+- Envoyer à un destinataire individuel uniquement. L'API ne publie pas automatiquement dans le groupe source.
+- Le message ne contient ni conversation brute, ni rapport complet, ni citation sensible, ni liste de participants.
+- Le lien mène vers le rapport web après contrôle de son token et de son état d'accès.
+- L'échec WhatsApp ne remet pas en cause l'achat ni le déverrouillage web ; l'email et l'accès dans le compte restent les fallbacks.
+- Une relance manuelle est possible, mais les retries automatiques ne doivent jamais produire de doublons visibles.
+- L'utilisateur peut révoquer le lien envoyé depuis les paramètres du rapport.
+- Références de conception : [collection officielle WhatsApp Business Platform](https://www.postman.com/meta/whatsapp-business-platform/overview) et [endpoint Messages](https://www.postman.com/meta/whatsapp-business-platform/folder/o48mro7/messages).
+
+### Sécurité et données WhatsApp
+
+- Le token d'accès Meta est un secret serveur avec les permissions minimales nécessaires ; il n'est jamais exposé au navigateur ni journalisé.
+- La version de Graph API est épinglée et sa migration fait l'objet d'un test avant chaque mise à niveau.
+- Le webhook est servi exclusivement en HTTPS, vérifie le challenge de configuration et valide l'authenticité des notifications avant traitement.
+- Les notifications sont rapprochées par `wamid` et horodatage, car les changements de statut peuvent arriver en retard ou dans le désordre.
+- Les traitements de webhook sont idempotents et répondent rapidement avant tout traitement asynchrone long.
+- Les données conservées se limitent au destinataire chiffré, au consentement, au template, au `wamid`, aux statuts, aux horodatages et aux erreurs nettoyées.
+- Les métriques et logs utilisent `deliveryId` ; ils n'incluent ni numéro en clair, ni contenu du rapport, ni token ou URL privée.
+
+### Distinction entre livraison et partage
+
+- **Livraison** : Roastin envoie le lien privé au numéro de l'acheteur après son consentement.
+- **Partage** : l'acheteur utilise le partage natif ou WhatsApp pour transmettre volontairement un lien de partage révocable aux participants.
+- Le produit ne déduit jamais le numéro des participants à partir de l'export et ne les contacte jamais automatiquement.
+- Le MVP n'est pas un bot présent dans le groupe et ne répond pas aux conversations du groupe.
 
 ### Confidentialité du partage
 
@@ -1400,6 +1487,9 @@ La connexion WhatsApp pourra être ajoutée ultérieurement.
 - Anonymiser.
 - Supprimer.
 - Télécharger une facture.
+- Envoyer ou renvoyer le roast sur WhatsApp.
+- Voir le dernier état de livraison WhatsApp.
+- Retirer le numéro WhatsApp enregistré pour la livraison.
 
 #### `/recover`
 
@@ -1446,8 +1536,9 @@ flowchart TD
     D --> F[Aperçu]
     F --> G[Paiement]
     G --> H[Rapport complet]
-    H --> I[Partage révocable]
-    H --> J[Suppression utilisateur]
+    H --> I[Livraison WhatsApp facultative]
+    H --> J[Partage révocable]
+    H --> K[Suppression utilisateur]
 ```
 
 ### Exigences
@@ -1462,6 +1553,10 @@ flowchart TD
 - Aucun usage pour entraîner des modèles.
 - Fournisseur IA avec conditions de rétention compatibles.
 - Rapport stocké séparément du contenu brut.
+- Numéro WhatsApp collecté uniquement pour la livraison demandée, séparément du chat importé.
+- Consentement WhatsApp horodaté avec la version de la mention affichée.
+- Suppression ou anonymisation du numéro selon une durée de rétention minimale à définir ; suppression immédiate sur demande lorsque aucune obligation légale ne l'impose.
+- Aucun numéro extrait de l'export WhatsApp n'est réutilisé comme destinataire.
 - Suppression self-service.
 - Option d'expiration automatique du rapport à étudier.
 - Le contenu brut ne doit jamais être inclus dans les inputs, résultats, erreurs ou métadonnées Temporal.
@@ -1508,6 +1603,7 @@ La modération doit fonctionner dans chaque langue supportée, y compris les con
 - `/{locale}/cookies` si nécessaire.
 
 Le traitement de messages appartenant à des non-utilisateurs nécessite une validation juridique spécifique avant lancement.
+La collecte d'un numéro pour la livraison WhatsApp, la preuve du choix utilisateur et la durée de conservation doivent figurer dans la politique de confidentialité.
 
 ## 19. Architecture technique
 
@@ -1526,6 +1622,7 @@ Le traitement de messages appartenant à des non-utilisateurs nécessite une val
 | Modèle initial | `openai/gpt-5.6-luna` |
 | Validation | Zod et JSON Schema strict |
 | Paiement | Stripe |
+| Messagerie transactionnelle | WhatsApp Business Platform Cloud API |
 | Internationalisation | Routage par locale, solution cible `next-intl` à confirmer |
 | Hébergement | VPS `cloud-station` |
 | Déploiement | Docker Compose |
@@ -1558,7 +1655,13 @@ flowchart LR
     W --> E[Encrypted ephemeral payload]
     W --> O[OpenRouter]
     O --> M[openai/gpt-5.6-luna]
-    W --> S[Stripe or email activities]
+    N -->|Create Checkout Session| S[Stripe Checkout]
+    U -->|Pay| S
+    S -->|Signed webhook| N
+    S -->|Return to report| U
+    W --> EML[Email provider]
+    W --> WA[WhatsApp Cloud API]
+    WA -->|Status webhook| N
     T --> D[(Temporal PostgreSQL)]
 ```
 
@@ -1578,6 +1681,7 @@ src/
 ├── server/
 │   ├── auth/
 │   ├── billing/
+│   ├── messaging/
 │   ├── reports/
 │   ├── storage/
 │   └── llm/
@@ -1610,6 +1714,8 @@ Next.js gère :
 - Paywall.
 - Dashboard.
 - Route Handlers pour Stripe et les intégrations serveur.
+- Route Handler Stripe recevant le corps brut et vérifiant la signature avant tout traitement.
+- Route Handlers WhatsApp pour la vérification initiale du webhook et la réception des statuts de livraison.
 - Démarrage, interrogation, signal et annulation des workflows Temporal.
 
 Next.js ne doit pas :
@@ -1638,7 +1744,10 @@ Prisma gère uniquement les tables applicatives :
 - Rapports.
 - Participants dérivés.
 - Entitlements et paiements.
+- Événements Stripe déjà traités.
 - Liens de partage.
+- Consentements et livraisons WhatsApp.
+- Événements WhatsApp déjà traités et statuts techniques associés.
 - Statuts de génération.
 - Tentatives LLM et coûts.
 - Versions de prompt.
@@ -1716,6 +1825,34 @@ Input interdit :
 10. Marquer le rapport prêt.
 11. Envoyer la notification si demandée.
 
+La notification de génération reste distincte de la livraison du roast payé. Aucun workflow de génération ne doit attendre un paiement ou une livraison WhatsApp pour terminer.
+
+#### Workflow de livraison WhatsApp
+
+Nom de travail :
+
+`DeliverReportWorkflow`
+
+Préconditions :
+
+- Rapport prêt.
+- Entitlement payé et vérifié côté serveur.
+- Demande de livraison explicite.
+- Consentement WhatsApp enregistré.
+- Numéro normalisé et validé.
+- Template approuvé disponible dans la locale choisie.
+
+Étapes :
+
+1. Créer ou reprendre une tentative de livraison avec une clé d'idempotence stable.
+2. Créer un token privé dédié à cette livraison, distinct des liens de partage public.
+3. Envoyer le template localisé via `POST /{phone-number-id}/messages`.
+4. Persister le `wamid` retourné par Meta sans journaliser le numéro en clair.
+5. Mettre à jour les statuts via les webhooks WhatsApp.
+6. En cas d'échec terminal, proposer le renvoi manuel et conserver l'accès web et email.
+
+Le workflow ne reçoit pas le rapport complet. Il manipule uniquement `reportId`, `deliveryId`, `templateKey`, `locale` et des références opaques vers le destinataire et le token.
+
 #### Règle de déterminisme
 
 Le workflow contient uniquement de l'orchestration déterministe.
@@ -1769,6 +1906,8 @@ Si le worker tombe après la réponse du fournisseur mais avant la persistence, 
 - Modération bloquante : état métier explicite, non retryable.
 - Erreur de persistence : retry.
 - Notification email : retry indépendant du statut prêt du rapport.
+- Envoi WhatsApp : retry uniquement sur erreurs transitoires, avec la même clé métier et sans créer plusieurs livraisons visibles.
+- Refus de template, numéro invalide ou consentement absent : erreur métier non retryable.
 
 Les appels LLM ont un timeout d'Activity explicite et un heartbeat uniquement si une étape locale longue le justifie.
 
@@ -1983,6 +2122,11 @@ Cette limite est acceptable pour le MVP si :
 - Taux de validation JSON au premier passage.
 - Taille des conversations.
 - Taux de suppression des payloads dans le délai prévu.
+- Taux de création, succès et échec des Checkout Sessions.
+- Délai entre paiement confirmé et entitlement actif.
+- Taux de demande de livraison WhatsApp après achat.
+- Délai et taux de livraison WhatsApp par locale et template.
+- Répartition des statuts WhatsApp `sent`, `delivered`, `read` et `failed`.
 
 #### Logs
 
@@ -1994,6 +2138,7 @@ Les logs ne contiennent jamais :
 - Nom de participant.
 - Email en clair.
 - Numéro de téléphone.
+- Token d'accès au rapport ou lien privé complet.
 
 Les erreurs publiques et Temporal sont nettoyées et référencées par identifiant interne.
 
@@ -2138,6 +2283,9 @@ Ces imperfections sont des assets ou règles de design reproductibles, pas des e
 - Construction des prompts.
 - Validation Zod.
 - Nettoyage des erreurs.
+- Sélection serveur du prix Stripe.
+- Idempotence du fulfillment et de la livraison WhatsApp.
+- Construction des templates WhatsApp sans donnée sensible.
 
 #### Temporal
 
@@ -2153,8 +2301,9 @@ Ces imperfections sont des assets ou règles de design reproductibles, pas des e
 
 - PostgreSQL et Prisma.
 - OpenRouter simulé puis environnement contrôlé.
-- Stripe webhooks.
+- Stripe Checkout et webhooks signés, dupliqués, désordonnés et différés.
 - Email.
+- Envoi WhatsApp Cloud API et webhooks de statut dupliqués ou désordonnés.
 - Accès aux rapports et partage.
 
 #### End-to-end
@@ -2164,6 +2313,10 @@ Ces imperfections sont des assets ou règles de design reproductibles, pas des e
 - Fermeture du navigateur pendant la génération.
 - Redémarrage du worker.
 - Paiement avec webhook retardé.
+- Paiement différé : parcours de succès et parcours d'échec.
+- Livraison WhatsApp consentie après paiement.
+- Échec WhatsApp avec accès web et fallback email conservés.
+- Renvoi manuel sans duplication du premier message.
 - Suppression et révocation du partage.
 - Parcours localisés.
 
@@ -2186,6 +2339,12 @@ Ces imperfections sont des assets ou règles de design reproductibles, pas des e
 - `checkout_started`.
 - `checkout_completed`.
 - `report_unlocked`.
+- `whatsapp_delivery_opt_in_viewed`.
+- `whatsapp_delivery_requested`.
+- `whatsapp_delivery_sent`.
+- `whatsapp_delivery_delivered`.
+- `whatsapp_delivery_read`.
+- `whatsapp_delivery_failed`.
 - `share_opened`.
 - `share_completed`.
 - `shared_report_viewed`.
@@ -2199,14 +2358,18 @@ Ces imperfections sont des assets ou règles de design reproductibles, pas des e
 3. Import → aperçu.
 4. Aperçu → checkout.
 5. Checkout → paiement.
-6. Rapport payé → partage.
-7. Partage → nouveau rapport.
+6. Rapport payé → demande de livraison WhatsApp.
+7. Demande WhatsApp → livraison.
+8. Rapport payé → partage.
+9. Partage → nouveau rapport.
 
 ### Cibles exploratoires de bêta
 
 - Import → aperçu : plus de 85 %.
 - Aperçu → paiement : 8 à 15 %.
 - Rapport acheté → partage : plus de 25 %.
+- Rapport acheté → demande de livraison WhatsApp : hypothèse à mesurer avant de fixer une cible.
+- Demande WhatsApp → message livré : plus de 95 %, hors numéros invalides et refus fournisseur.
 - Destinataire → nouveau démarrage : plus de 5 %.
 
 Ces valeurs sont des hypothèses à tester.
@@ -2227,6 +2390,9 @@ Ces valeurs sont des hypothèses à tester.
 - Paiement unique.
 - Stripe.
 - Livraison email.
+- Livraison facultative du roast via WhatsApp Business Platform Cloud API après paiement.
+- Template transactionnel localisé avec lien privé vers le rapport.
+- Suivi des statuts de livraison WhatsApp par webhook.
 - Rapport privé.
 - Partage révocable.
 - Dashboard minimal.
@@ -2253,13 +2419,22 @@ Ces valeurs sont des hypothèses à tester.
 - Questions de suivi à l'IA.
 - PDF.
 - Analyse audio ou image.
-- Notifications WhatsApp.
+- Bot conversationnel WhatsApp.
+- Publication automatique dans le groupe WhatsApp source.
+- Relances marketing ou campagnes WhatsApp.
 
 ## 22. États techniques et métier à prévoir
 
 - Paiement réussi mais webhook retardé.
 - Paiement reçu deux fois.
+- Checkout terminé avec moyen de paiement différé encore en traitement.
+- Événement Stripe dupliqué, désordonné ou reçu après le retour navigateur.
 - Rapport généré mais email non reçu.
+- Rapport payé mais template WhatsApp indisponible dans la locale.
+- Numéro WhatsApp invalide, non joignable ou refusé par Meta.
+- Message WhatsApp accepté par l'API mais non livré.
+- Webhook WhatsApp dupliqué, désordonné ou retardé.
+- Consentement WhatsApp retiré après création de la livraison.
 - Job d'analyse bloqué.
 - Conversation supprimée pendant le traitement.
 - Rapport acheté puis supprimé.
@@ -2286,7 +2461,12 @@ Ces valeurs sont des hypothèses à tester.
 | Prix Classic | À tester | 12,99 USD avec localisation |
 | Prix Deep | Ouvert | Supérieur à Classic |
 | Photo de groupe | Ouvert | La supprimer du MVP |
-| WhatsApp | Verrouillé | MVP |
+| Import WhatsApp | Verrouillé | MVP via export `.txt` ou `.zip` |
+| Livraison WhatsApp | Verrouillé | MVP après paiement, opt-in explicite et lien privé envoyé par Cloud API |
+| Contenu du message WhatsApp | Verrouillé | Template minimal ; aucun transcript ni rapport complet dans le message |
+| Publication dans un groupe WhatsApp | Hors périmètre | Partage manuel par l'utilisateur uniquement |
+| Prestataire de paiement | Verrouillé | Stripe Checkout Sessions en paiement unique |
+| Fiscalité Stripe | À valider | Activer Stripe Tax uniquement après registrations et validation juridique |
 | iMessage | Ouvert | Rapidement après WhatsApp |
 | Nombre de langues | Verrouillé pour le périmètre initial | 8 locales occidentales, chacune avec sa landing |
 | Authentification | Verrouillé pour le MVP | Email OTP |
@@ -2308,8 +2488,24 @@ Avant tout développement :
 8. Faire relire le cadre juridique.
 9. Définir le niveau de validation humaine requis pour chaque locale avant indexation.
 10. Établir les critères d'acceptation du MVP.
+11. Créer les produits et prix Stripe de test, puis valider les devises réellement proposées au lancement.
+12. Valider les obligations fiscales et la stratégie de facturation avant toute activation de Stripe Tax.
+13. Créer le WhatsApp Business Account, enregistrer le numéro d'envoi et soumettre les huit variantes localisées du template transactionnel.
+14. Tester le parcours complet paiement → entitlement → livraison WhatsApp avec webhooks retardés, dupliqués et en échec.
 
 ## 25. Journal des décisions
+
+### 6 août 2026 — Version 1.0
+
+- Stripe Checkout Sessions devient la solution de paiement verrouillée du MVP pour les achats uniques.
+- Le déverrouillage repose sur un fulfillment serveur idempotent, déclenché par webhook et réconcilié au retour de Checkout.
+- Les méthodes de paiement restent dynamiques et les secrets Stripe sont limités, séparés par environnement et absents du client.
+- Stripe Tax reste désactivé tant que les registrations et obligations fiscales ne sont pas validées.
+- La WhatsApp Business Platform Cloud API devient un canal de livraison facultatif après paiement.
+- L'utilisateur choisit explicitement de recevoir un template transactionnel avec un lien privé vers son roast.
+- Aucun transcript, rapport complet ou numéro extrait de la conversation n'est envoyé à Meta.
+- La livraison au numéro individuel de l'acheteur est séparée du partage volontaire au groupe.
+- Les statuts Stripe et WhatsApp sont suivis par des webhooks signés, idempotents et tolérants aux redéliveries.
 
 ### 6 août 2026 — Version 0.9
 

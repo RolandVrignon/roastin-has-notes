@@ -2,18 +2,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPrisma } from "@/lib/db";
 import { offerForLocale } from "@/lib/offers";
-import { viewerReportWhere } from "@/lib/report-access";
 import { checkoutIntegrationIdentifier, getStripe } from "@/lib/stripe";
+import { readUserSession } from "@/lib/user-session";
 
 const inputSchema = z.object({ reportId: z.string().uuid() });
 
 export async function POST(request: Request) {
   try {
     const { reportId } = inputSchema.parse(await request.json());
-    const access = await viewerReportWhere();
-    if (!access) return NextResponse.json({ error: "Report not found" }, { status: 404 });
+    const userSession = await readUserSession();
+    if (!userSession) return NextResponse.json({ error: "WhatsApp sign-in required" }, { status: 401 });
     const db = getPrisma();
-    const report = await db.report.findFirst({ where: { id: reportId, ...access, deletedAt: null, status: "READY" } });
+    const report = await db.report.findFirst({ where: { id: reportId, userId: userSession.userId, deletedAt: null, status: "READY" } });
     if (!report) return NextResponse.json({ error: "Report not found" }, { status: 404 });
     const offer = offerForLocale(report.locale);
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;

@@ -13,11 +13,6 @@ const llm = proxyActivities<typeof activities>({
   retry: { initialInterval: "5 seconds", backoffCoefficient: 2, maximumInterval: "2 minutes", maximumAttempts: 4, nonRetryableErrorTypes: ["REPORT_NOT_AVAILABLE", "GENERATION_REVISION_MISMATCH", "GENERATION_PAYLOAD_MISSING", "ANALYSIS_EVIDENCE_INVALID", "REPORT_PRIVACY_VALIDATION_FAILED"] },
 });
 
-const notification = proxyActivities<typeof activities>({
-  startToCloseTimeout: "30 seconds",
-  retry: { initialInterval: "10 seconds", backoffCoefficient: 2, maximumInterval: "5 minutes", maximumAttempts: 5 },
-});
-
 export const cancelGenerationSignal = defineSignal("cancelGeneration");
 export const deleteGenerationSignal = defineSignal("deleteGeneration");
 export const generationStatusQuery = defineQuery<GenerationWorkflowStatus>("generationStatus");
@@ -87,11 +82,6 @@ export async function GenerateReportWorkflow(input: GenerateReportInput): Promis
     await operational.markReportReady(input.reportId);
     current = { status: "READY", stage: "READY", progress: 100, errorCode: null };
 
-    try {
-      await notification.sendReportReadyNotification(input.reportId);
-    } catch {
-      // Readiness is independent from an optional notification failure.
-    }
     return current;
   } catch {
     try {

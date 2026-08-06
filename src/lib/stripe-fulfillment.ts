@@ -1,7 +1,7 @@
 import type Stripe from "stripe";
 import { getPrisma } from "@/lib/db";
-import { sendReportAccessEmail } from "@/lib/email";
 import { offerByCode } from "@/lib/offers";
+import { deliverPaidReport } from "@/lib/whatsapp-delivery";
 
 export async function fulfillCheckout(session: Stripe.Checkout.Session, eventId?: string) {
   const reportId = session.client_reference_id;
@@ -35,20 +35,13 @@ export async function fulfillCheckout(session: Stripe.Checkout.Session, eventId?
       create: { reportId, sourcePaymentId: payment.id, offerCode: offer.code },
       update: {},
     });
-    const email = session.customer_details?.email?.trim().toLowerCase();
-    const user = email && email.length <= 254
-      ? await tx.user.upsert({ where: { email }, create: { email }, update: {} })
-      : null;
-    const report = await tx.report.update({
+    await tx.report.update({
       where: { id: reportId },
-      data: { paidAt: new Date(), ...(user ? { userId: user.id } : {}) },
-      select: { chatName: true },
+      data: { paidAt: new Date() },
     });
-    return { fulfilled: true, paymentId: payment.id, email: user?.email, chatName: report.chatName } as const;
+    return { fulfilled: true } as const;
   }, { isolationLevel: "Serializable" });
 
-  if (result.fulfilled && result.email) {
-    await sendReportAccessEmail({ email: result.email, reportId, chatName: result.chatName, paymentId: result.paymentId }).catch(() => undefined);
-  }
+  if (result.fulfilled) await deliverPaidReport(reportId).catch(() => undefined);
   return result.fulfilled;
 }

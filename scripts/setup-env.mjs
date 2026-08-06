@@ -42,17 +42,19 @@ const providerKeys = [
   "STRIPE_PRICE_CLASSIC_USD",
   "STRIPE_PRICE_CLASSIC_EUR",
   "STRIPE_PRICE_CLASSIC_BRL",
-  "RESEND_API_KEY",
-  "EMAIL_FROM",
   "WHATSAPP_GRAPH_VERSION",
   "WHATSAPP_ACCESS_TOKEN",
   "WHATSAPP_PHONE_NUMBER_ID",
   "WHATSAPP_APP_SECRET",
-  "WHATSAPP_TEMPLATE_NAME",
+  "WHATSAPP_AUTH_TEMPLATE_NAME",
+  "WHATSAPP_AUTH_TEMPLATE_LANGUAGE",
+  "WHATSAPP_REPORT_TEMPLATE_NAME",
+  "WHATSAPP_REPORT_TEMPLATE_LANGUAGE",
+  "NEXT_PUBLIC_WHATSAPP_SUPPORT_NUMBER",
 ];
 
 for (const key of providerKeys) {
-  if (!values.has(key)) values.set(key, key === "OPENROUTER_MODEL" ? "openai/gpt-5.6-luna" : key === "WHATSAPP_GRAPH_VERSION" ? "v26.0" : key === "WHATSAPP_TEMPLATE_NAME" ? "roastin_report_ready" : "");
+  if (!values.has(key)) values.set(key, key === "OPENROUTER_MODEL" ? "openai/gpt-5.6-luna" : key === "WHATSAPP_GRAPH_VERSION" ? "v26.0" : key === "WHATSAPP_AUTH_TEMPLATE_NAME" ? "roastin_login_code" : key === "WHATSAPP_AUTH_TEMPLATE_LANGUAGE" ? "en_US" : key === "WHATSAPP_REPORT_TEMPLATE_NAME" ? "roastin_report_ready" : "");
 }
 
 const output = [

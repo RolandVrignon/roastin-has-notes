@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { decryptSensitive } from "@/lib/data-encryption";
 import { getPrisma } from "@/lib/db";
 import { readUserSession } from "@/lib/user-session";
 
@@ -16,7 +17,8 @@ export async function GET() {
       deliveries: { select: { status: true, consentVersion: true, consentAt: true, templateName: true, locale: true, lastStatusAt: true, createdAt: true } },
     },
   });
-  return NextResponse.json({ exportedAt: new Date().toISOString(), account: { email: session.user.email, createdAt: session.user.createdAt }, reports }, {
+  const phone = decryptSensitive({ ciphertext: session.user.phoneCiphertext, iv: session.user.phoneIv, tag: session.user.phoneTag });
+  return NextResponse.json({ exportedAt: new Date().toISOString(), account: { whatsappNumber: phone, whatsappConsentVersion: session.user.whatsappConsentVersion, whatsappConsentAt: session.user.whatsappConsentAt, createdAt: session.user.createdAt }, reports }, {
     headers: { "Cache-Control": "private, no-store", "Content-Disposition": `attachment; filename="roastin-data-${new Date().toISOString().slice(0, 10)}.json"` },
   });
 }

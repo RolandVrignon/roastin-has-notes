@@ -253,25 +253,6 @@ export async function deleteCancelledReport(reportId: string) {
   }
 }
 
-export async function sendReportReadyNotification(reportId: string) {
-  try {
-    const report = await getPrisma().report.findUnique({ where: { id: reportId }, select: { chatName: true, user: { select: { email: true } } } });
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.EMAIL_FROM;
-    if (!report?.user?.email || !apiKey || !from) return { sent: false };
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: report.user.email, subject: "Your Roastin report is ready", html: `<p>Your private report for <strong>${report.chatName.replace(/[<>&\"']/g, "")}</strong> is ready.</p><p><a href="${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/r/${reportId}">Open your report</a></p>` }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) throw new Error("EMAIL_PROVIDER_FAILED");
-    return { sent: true };
-  } catch (error) {
-    safeFailure("REPORT_NOTIFICATION_FAILED", error);
-  }
-}
-
 export async function purgeExpiredData() {
   try {
     const db = getPrisma();

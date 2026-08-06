@@ -15,7 +15,7 @@ const dictionary = {
   landing: {
     eyebrow: "The group chat report", titleBefore: "Your chat has", titleAccent: "secrets.", titleAfter: "Roastin has notes.",
     subtitle: "Upload a WhatsApp conversation. Get the unfiltered, weirdly accurate report nobody in the chat would dare to write.",
-    privacyNote: "Your original chat is not kept after generation", trust: ["No account needed", "Private by default", "Ready in minutes"],
+    privacyNote: "Your original chat is not kept after generation", trust: ["WhatsApp verified", "Private by default", "Ready in minutes"],
     ticker: ["Nobody asked.", "Roastin answered.", "The receipts are in."],
     howEyebrow: "Ridiculously easy", howTitle: "From group chat to main event", howText: "No questionnaires. No awkward quizzes. Roastin works with what your group already said.",
     steps: [
@@ -76,10 +76,10 @@ const dictionary = {
       eyebrow: "Privacy", title: "What we process, keep and delete", intro: "This plain-language notice describes the product as it works today. It is not a promise that we store nothing.",
       sections: [
         { title: "The original conversation", paragraphs: ["Your browser reads the export locally for the initial summary. When you request a report, the conversation is sent over HTTPS, cleaned of obvious email addresses and phone numbers, encrypted with AES-256-GCM in temporary storage, and processed by our worker and configured AI provider.", "The encrypted payload is excluded from the application database and backups. It is deleted after success, failure or cancellation, with an automatic 24-hour expiry as a final safety net. We ask the AI provider not to use the request for data collection, but its own processing terms still apply."] },
-        { title: "What we keep", paragraphs: ["We store the derived report, its preview, chat name, language, aggregate message and participant counts, creation dates, model identifier and a record that raw processing finished."], bullets: ["An anonymous browser ownership token, stored as a one-way hash on our server", "Email and short-lived login codes if you create an account", "Stripe checkout and payment references", "Revocable share links", "For optional WhatsApp delivery: an encrypted phone number, a blind index, consent time, template, provider message ID and delivery status"] },
+        { title: "What we keep", paragraphs: ["We store the derived report, its preview, chat name, language, aggregate message and participant counts, creation dates, model identifier and a record that raw processing finished."], bullets: ["A short-lived authenticated session token, stored as a one-way hash", "Your verified WhatsApp number encrypted at rest, a blind index, consent time and short-lived login codes", "Stripe checkout and payment references", "Revocable share and delivery links", "WhatsApp template, provider message ID and delivery status"] },
         { title: "Why and for how long", paragraphs: ["We use these data to create and deliver the service, secure access, fulfil purchases, prevent abuse and meet accounting or legal duties. Reports remain available until you delete them. Login sessions currently expire after 30 days and delivery links after 7 days. Payment records may need to remain for legal and accounting reasons."], bullets: ["A final retention period for encrypted WhatsApp delivery numbers is not yet configured; you can remove that number immediately from the report.", "Operational logs must not contain chat messages, but hosting and providers may retain technical request metadata under their own policies."] },
         { title: "Your choices", paragraphs: ["You can delete a report from its private page, revoke sharing links, and remove WhatsApp delivery data. For account access, correction, export or deletion requests, use the contact page. Some transaction records may be retained where the law requires it."] },
-        { title: "Processors and international transfers", paragraphs: ["Depending on enabled features, data can be processed by our hosting and database providers, OpenRouter and the selected model provider, Stripe, the email provider, and Meta for requested WhatsApp delivery. Their locations and safeguards must be documented before public launch."] },
+        { title: "Processors and international transfers", paragraphs: ["Depending on enabled features, data can be processed by our hosting and database providers, OpenRouter and the selected model provider, Stripe, and Meta for WhatsApp authentication and transactional delivery. Their locations and safeguards must be documented before public launch."] },
         { title: "Launch status", paragraphs: ["The legal entity acting as data controller, its postal address, privacy contact, jurisdiction-specific legal bases and definitive retention schedule are not yet configured. This service should not be presented as legally launch-ready until those details and the treatment of non-user participants have been reviewed by counsel."] },
       ],
     },
@@ -99,23 +99,23 @@ const dictionary = {
         { title: "Export from WhatsApp", paragraphs: ["Open the chat, choose Export chat, select Without media, then upload the resulting .txt or .zip file. The current beta accepts files up to 2 MB."] },
         { title: "Import problems", paragraphs: ["Use an original WhatsApp text export with at least two participants and eight messages. Do not paste screenshots, PDFs or media archives. International date formats are supported, but unusual custom exports may fail."] },
         { title: "Privacy and safety", paragraphs: ["The original export is not stored in our application database. Reports are private by default. The product refuses conversations that appear to involve minors and removes obvious email addresses and phone numbers before AI generation."] },
-        { title: "Access and sharing", paragraphs: ["Keep the same browser to access a report created without an account, or sign in using the email attached during purchase. Paid reports can create a revocable share link. WhatsApp delivery is optional and requires explicit consent."] },
+        { title: "Access and sharing", paragraphs: ["Sign in with your verified WhatsApp number to create and recover reports. After payment, the private seven-day report link is sent automatically to that number. Separate sharing links remain revocable."] },
       ],
     },
     contact: {
-      eyebrow: "Contact", title: "Talk to a human", intro: "For product help, privacy requests or security reports, email the address below. Include as little conversation content as possible.",
+      eyebrow: "Contact", title: "Talk to a human", intro: "For product help, privacy requests or security reports, use the official Roastin WhatsApp conversation. Include as little conversation content as possible.",
       sections: [
-        { title: "Support", paragraphs: ["Email support@roastinhasnotes.com with the report ID, the email used for payment if relevant, and a short description. Do not attach your chat export."] },
-        { title: "Privacy requests", paragraphs: ["Use the subject “Privacy request”. We may need to verify that you control the report or account before acting. The response time and formal controller contact will be confirmed before public launch."] },
-        { title: "Security", paragraphs: ["Use the subject “Security report” and avoid including exploitable details in public channels. The support mailbox must be provisioned and monitored before launch."] },
+        { title: "Support", paragraphs: ["Send the report ID and a short description in the official Roastin WhatsApp conversation. Do not attach your chat export."] },
+        { title: "Privacy requests", paragraphs: ["Start the message with “Privacy request”. We may need to verify that you control the WhatsApp account before acting. The response time and formal controller contact will be confirmed before public launch."] },
+        { title: "Security", paragraphs: ["Start the message with “Security report” and avoid including exploitable details. The business WhatsApp support channel must be provisioned and monitored before launch."] },
       ],
     },
     delete: {
-      eyebrow: "Delete data", title: "Remove your report or delivery data", intro: "Deletion is available from the private report page. Account-wide deletion still requires a verified support request in the current beta.",
+      eyebrow: "Delete data", title: "Remove your report or account", intro: "Report deletion is available from the private report page, and account-wide deletion is available from account settings.",
       sections: [
         { title: "Delete a report", paragraphs: ["Open the private report in the browser or account that owns it and choose Delete report. The report content and preview are cleared, and its sharing links stop working. Payment records can remain where legally required."] },
         { title: "Remove a WhatsApp number", paragraphs: ["On the paid report, remove WhatsApp delivery data. The encrypted number and its blind index are cleared and delivery links are revoked."] },
-        { title: "Delete an account or request help", paragraphs: ["Email support@roastinhasnotes.com with the subject “Deletion request”. Do not send the original conversation. We will verify ownership before acting. Automated account-wide deletion is not yet implemented."] },
+        { title: "Delete an account", paragraphs: ["Open Account settings while signed in with your verified WhatsApp number, then choose permanent deletion. Do not send the original conversation to support."] },
       ],
     },
   },

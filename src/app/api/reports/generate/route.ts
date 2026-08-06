@@ -23,6 +23,8 @@ export async function POST(request: Request) {
   let payloadReference: string | undefined;
   let reportId: string | undefined;
   try {
+    const userSession = await readUserSession();
+    if (!userSession) return NextResponse.json({ error: "Verify your WhatsApp number before creating a report" }, { status: 401 });
     const input = inputSchema.parse(await request.json());
     const parsed = parseWhatsApp(input.rawText);
     if (parsed.messages.length < 8 || parsed.participants.length < 2) {
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
     if (hasMinorSignal(parsed)) return NextResponse.json({ error: "Roastin cannot analyse conversations that appear to involve minors." }, { status: 422 });
 
     const sanitized = sanitizeConversation(parsed);
-    const [owner, userSession] = await Promise.all([getOrCreateOwnerSession(), readUserSession()]);
+    const owner = await getOrCreateOwnerSession();
     const payload = await createEphemeralPayload({
       chatName: input.chatName,
       chatType: input.chatType,
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
       data: {
         id: reportId,
         ownerTokenHash: owner.hash,
-        userId: userSession?.userId,
+        userId: userSession.userId,
         chatName: input.chatName,
         locale: input.locale,
         status: "GENERATING",

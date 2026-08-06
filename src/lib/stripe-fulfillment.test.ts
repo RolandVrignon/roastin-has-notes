@@ -1,9 +1,10 @@
 import type Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getPrismaMock } = vi.hoisted(() => ({ getPrismaMock: vi.fn() }));
+const { deliverPaidReportMock, getPrismaMock } = vi.hoisted(() => ({ deliverPaidReportMock: vi.fn(async () => ({ id: "delivery-123", status: "SENT" })), getPrismaMock: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ getPrisma: getPrismaMock }));
+vi.mock("@/lib/whatsapp-delivery", () => ({ deliverPaidReport: deliverPaidReportMock }));
 
 import { fulfillCheckout } from "@/lib/stripe-fulfillment";
 
@@ -32,7 +33,6 @@ function database() {
     },
     payment: { upsert: vi.fn(async () => ({ id: "payment-123" })) },
     entitlement: { upsert: vi.fn(async () => ({ id: "entitlement-123" })) },
-    user: { upsert: vi.fn(async () => ({ id: "user-123", email: "buyer@example.com" })) },
     report: { update: vi.fn(async () => ({ id: "report-123", chatName: "The chat" })) },
   };
   const db = {
@@ -47,6 +47,7 @@ function database() {
 describe("Stripe checkout fulfillment", () => {
   beforeEach(() => {
     getPrismaMock.mockReset();
+    deliverPaidReportMock.mockClear();
   });
 
   it("fulfills a paid checkout once when Stripe redelivers the same event", async () => {
@@ -60,6 +61,7 @@ describe("Stripe checkout fulfillment", () => {
     expect(tx.payment.upsert).toHaveBeenCalledTimes(2);
     expect(tx.entitlement.upsert).toHaveBeenCalledTimes(2);
     expect(tx.report.update).toHaveBeenCalledTimes(2);
+    expect(deliverPaidReportMock).toHaveBeenCalledTimes(2);
     expect(db.$transaction).toHaveBeenCalledTimes(2);
     expect(db.$transaction.mock.calls[0][1]).toEqual({ isolationLevel: "Serializable" });
   });

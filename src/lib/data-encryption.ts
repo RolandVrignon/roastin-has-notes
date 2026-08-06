@@ -1,4 +1,4 @@
-import { createCipheriv, createHmac, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 
 function encryptionKey() {
   const encoded = process.env.DATA_ENCRYPTION_KEY;
@@ -13,6 +13,15 @@ export function encryptSensitive(value: string) {
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
   const ciphertext = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
   return { ciphertext: ciphertext.toString("base64"), iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64") };
+}
+
+export function decryptSensitive(input: { ciphertext: string; iv: string; tag: string }) {
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(input.iv, "base64"));
+  decipher.setAuthTag(Buffer.from(input.tag, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(input.ciphertext, "base64")),
+    decipher.final(),
+  ]).toString("utf8");
 }
 
 export function blindIndex(value: string) {

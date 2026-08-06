@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ReportStatus {
+  GENERATING
+  READY
+  FAILED
+  DELETED
+}
+
+enum ReportGenerationStage {
+  QUEUED
+  VALIDATING
+  ANALYZING
+  DRAFTING
+  FINALIZING
+  READY
+  FAILED
+}
+
+enum GenerationArtifactKind {
+  ANALYSIS
+  REPORT
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum SharePurpose {
+  SHARING
+  DELIVERY
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  REVOKED
+}
+
+model User {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String    @unique
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  reports   Report[]
+  sessions  Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+model Report {
+  id                  String                @id @default(uuid()) @db.Uuid
+  ownerTokenHash      String                @map("owner_token_hash")
+  userId              String?               @map("user_id") @db.Uuid
+  chatName            String                @map("chat_name")
+  locale              String                @default("en")
+  status              ReportStatus          @default(GENERATING)
+  generationStage     ReportGenerationStage @default(QUEUED) @map("generation_stage")
+  generationRevision  Int                   @default(1) @map("generation_revision")
+  workflowId          String?               @unique @map("workflow_id")
+  payloadReference    String?               @unique @map("payload_reference")
+  payloadExpiresAt    DateTime?             @map("payload_expires_at")
+  publicErrorCode     String?               @map("public_error_code")
+  preview             Json?
+  content             Json?
+  messageCount        Int                   @default(0) @map("message_count")
+  participantCount    Int                   @default(0) @map("participant_count")
+  dateRange           String?               @map("date_range")
+  model               String?
+  promptVersion       String                @default("classic-v1") @map("prompt_version")
+  paidAt              DateTime?             @map("paid_at")
+  rawDeletedAt        DateTime?             @map("raw_deleted_at")
+  deletedAt           DateTime?             @map("deleted_at")
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  user                User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  payments            Payment[]
+  shareLinks          ShareLink[]
+  entitlement         Entitlement?
+  deliveries          WhatsappDelivery[]
+  generationArtifacts GenerationArtifact[]
+
+  @@index([ownerTokenHash])
+  @@index([userId])
+  @@index([status, createdAt])
+  @@map("reports")
+}
+
+model GenerationArtifact {
+  id             String                 @id @default(uuid()) @db.Uuid
+  reportId       String                 @map("report_id") @db.Uuid
+  revision       Int
+  kind           GenerationArtifactKind
+  idempotencyKey String                 @unique @map("idempotency_key")
+  content        Json
+  model          String?
+  inputTokens    Int?                   @map("input_tokens")
+  outputTokens   Int?                   @map("output_tokens")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  report         Report                 @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, revision, kind])
+  @@index([reportId, createdAt])
+  @@map("generation_artifacts")
+}
+
+model Payment {
+  id                    String        @id @default(uuid()) @db.Uuid
+  reportId              String        @map("report_id") @db.Uuid
+  stripeCheckoutId      String        @unique @map("stripe_checkout_id")
+  stripePaymentIntentId String?       @unique @map("stripe_payment_intent_id")
+  status                PaymentStatus @default(PENDING)
+  amount                Int
+  currency              String
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+  report                Report        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  entitlement           Entitlement?
+
+  @@index([reportId])
+  @@map("payments")
+}
+
+model Entitlement {
+  id              String   @id @default(uuid()) @db.Uuid
+  reportId        String   @unique @map("report_id") @db.Uuid
+  sourcePaymentId String   @unique @map("source_payment_id") @db.Uuid
+  offerCode       String   @map("offer_code")
+  createdAt       DateTime @default(now()) @map("created_at")
+  report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  sourcePayment   Payment  @relation(fields: [sourcePaymentId], references: [id], onDelete: Restrict)
+
+  @@map("entitlements")
+}
+
+model StripeEvent {
+  id        String   @id
+  type      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("stripe_events")
+}
+
+model WhatsappEvent {
+  id        String   @id
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("whatsapp_events")
+}
+
+model ShareLink {
+  id             String            @id @default(uuid()) @db.Uuid
+  reportId       String            @map("report_id") @db.Uuid
+  tokenHash      String            @unique @map("token_hash")
+  purpose        SharePurpose      @default(SHARING)
+  anonymizeNames Boolean           @default(false) @map("anonymize_names")
+  hideQuotes     Boolean           @default(false) @map("hide_quotes")
+  expiresAt      DateTime          @map("expires_at")
+  revokedAt      DateTime?         @map("revoked_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  report         Report            @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  delivery       WhatsappDelivery?
+
+  @@index([reportId, expiresAt])
+  @@map("share_links")
+}
+
+model WhatsappDelivery {
+  id                String         @id @default(uuid()) @db.Uuid
+  reportId          String         @map("report_id") @db.Uuid
+  shareLinkId       String         @unique @map("share_link_id") @db.Uuid
+  phoneCiphertext   String?        @map("phone_ciphertext")
+  phoneIv           String?        @map("phone_iv")
+  phoneTag          String?        @map("phone_tag")
+  phoneHash         String?        @map("phone_hash")
+  consentVersion    String         @map("consent_version")
+  consentAt         DateTime       @map("consent_at")
+  templateName      String         @map("template_name")
+  locale            String
+  providerMessageId String?        @unique @map("provider_message_id")
+  status            DeliveryStatus @default(QUEUED)
+  lastStatusAt      DateTime?      @map("last_status_at")
+  errorCode         String?        @map("error_code")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  report            Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  shareLink         ShareLink      @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, createdAt])
+  @@index([phoneHash])
+  @@map("whatsapp_deliveries")
+}
+
+model OtpCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String
+  codeHash  String    @map("code_hash")
+  attempts  Int       @default(0)
+  lockedAt  DateTime? @map("locked_at")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([email, expiresAt])
+  @@map("otp_codes")
+}

@@ -1,0 +1,230 @@
+name: roastin-has-notes
+
+services:
+  reverse-proxy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      APP_ADDRESS: ${APP_ADDRESS:-http://localhost}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - public
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-roastin}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-roastin}?schema=public
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-5.6-luna}
+      TEMPORAL_ADDRESS: temporal-server:7233
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      TEMPORAL_TASK_QUEUE: ${TEMPORAL_TASK_QUEUE:-report-generation}
+      TEMPORAL_PAYLOAD_DIR: /var/lib/roastin/payloads
+      TEMPORAL_PAYLOAD_MASTER_KEY: ${TEMPORAL_PAYLOAD_MASTER_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}
+      STRIPE_PRICE_CLASSIC_USD: ${STRIPE_PRICE_CLASSIC_USD:-}
+      STRIPE_PRICE_CLASSIC_EUR: ${STRIPE_PRICE_CLASSIC_EUR:-}
+      STRIPE_PRICE_CLASSIC_BRL: ${STRIPE_PRICE_CLASSIC_BRL:-}
+      ALLOW_DEMO_PAYMENTS: ${ALLOW_DEMO_PAYMENTS:-false}
+      DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-production}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
+      PHONE_HASH_SECRET: ${PHONE_HASH_SECRET:-}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      ALLOW_DEV_OTP: ${ALLOW_DEV_OTP:-false}
+      WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-v26.0}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_TEMPLATE_NAME: ${WHATSAPP_TEMPLATE_NAME:-roastin_report_ready}
+    command: ["sh", "-c", "pnpm exec prisma migrate deploy && exec pnpm start"]
+    expose:
+      - "3000"
+    volumes:
+      - temporal_payloads:/var/lib/roastin/payloads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      payload-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    networks:
+      - public
+      - private
+    security_opt:
+      - no-new-privileges:true
+
+  report-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-roastin}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-roastin}?schema=public
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-5.6-luna}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      TEMPORAL_ADDRESS: temporal-server:7233
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      TEMPORAL_TASK_QUEUE: ${TEMPORAL_TASK_QUEUE:-report-generation}
+      TEMPORAL_MAX_CONCURRENT_ACTIVITIES: ${TEMPORAL_MAX_CONCURRENT_ACTIVITIES:-4}
+      TEMPORAL_PAYLOAD_DIR: /var/lib/roastin/payloads
+      TEMPORAL_PAYLOAD_MASTER_KEY: ${TEMPORAL_PAYLOAD_MASTER_KEY:-}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
+    command: ["pnpm", "worker"]
+    healthcheck:
+      disable: true
+    volumes:
+      - temporal_payloads:/var/lib/roastin/payloads
+    depends_on:
+      web:
+        condition: service_healthy
+      temporal-server:
+        condition: service_started
+      payload-init:
+        condition: service_completed_successfully
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+
+  payload-init:
+    image: alpine:3.22.2
+    restart: "no"
+    command: ["sh", "-c", "chown -R 1001:1001 /payloads && chmod 700 /payloads"]
+    volumes:
+      - temporal_payloads:/payloads
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+
+  temporal-server:
+    image: temporalio/auto-setup:1.29.7
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_SEEDS: temporal-postgres
+      POSTGRES_USER: ${TEMPORAL_POSTGRES_USER:-temporal}
+      POSTGRES_PWD: ${TEMPORAL_POSTGRES_PASSWORD:-change-me-temporal}
+      DEFAULT_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      DEFAULT_NAMESPACE_RETENTION: 24h
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    expose:
+      - "7233"
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+
+  temporal-ui:
+    image: temporalio/ui:2.51.0
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: temporal-server:7233
+      TEMPORAL_DEFAULT_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      TEMPORAL_DISABLE_WRITE_ACTIONS: "true"
+    depends_on:
+      temporal-server:
+        condition: service_started
+    expose:
+      - "8080"
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+
+  temporal-admin-tools:
+    image: temporalio/admin-tools:1.29.7-tctl-1.18.4-cli-1.7.2
+    profiles: ["ops"]
+    environment:
+      TEMPORAL_ADDRESS: temporal-server:7233
+    depends_on:
+      temporal-server:
+        condition: service_started
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-roastin}
+      POSTGRES_USER: ${POSTGRES_USER:-roastin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+
+  temporal-postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${TEMPORAL_POSTGRES_DB:-temporal}
+      POSTGRES_USER: ${TEMPORAL_POSTGRES_USER:-temporal}
+      POSTGRES_PASSWORD: ${TEMPORAL_POSTGRES_PASSWORD:-change-me-temporal}
+    volumes:
+      - temporal_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    networks:
+      - private
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  public:
+  private:
+    internal: true
+
+volumes:
+  postgres_data:
+  temporal_postgres_data:
+  temporal_payloads:
+  caddy_data:
+  caddy_config:

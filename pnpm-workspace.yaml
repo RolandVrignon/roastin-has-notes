@@ -1,0 +1,10 @@
+allowBuilds:
+  '@prisma/engines': true
+  '@swc/core': true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+  sharp: false
+  unrs-resolver: false
+minimumReleaseAgeExclude:
+  - tsx@4.23.9

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - name: Reject committed provider secrets
+        shell: bash
+        run: |
+          if git grep -nE '(sk|rk)_(test|live)_[A-Za-z0-9]{16,}|whsec_[A-Za-z0-9]{16,}|sk-or-v1-[A-Za-z0-9]{16,}' -- ':!pnpm-lock.yaml'; then
+            echo "A provider secret appears to be committed. Rotate it and remove it from git history."
+            exit 1
+          fi
+      - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm build
+      - run: docker compose config --quiet

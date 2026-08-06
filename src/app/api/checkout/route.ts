@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       client_reference_id: reportId,
       metadata: { reportId, offerCode: offer.code },
       line_items: [{ quantity: 1, price: offer.stripePriceId }],
-      integration_identifier: checkoutIntegrationIdentifier(),
+      integration_identifier: checkoutIntegrationIdentifier(reportId),
     }, { idempotencyKey: `checkout:${reportId}` });
     if (!session.url) throw new Error("Stripe did not return a checkout URL");
     await db.payment.upsert({

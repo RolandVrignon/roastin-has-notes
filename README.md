@@ -3,6 +3,7 @@
 Turn a WhatsApp conversation into the unfiltered report nobody in the chat would dare to write.
 
 The living product specification is in [Brief.md](./Brief.md).
+The Meta provisioning checklist is in [docs/whatsapp-setup.md](./docs/whatsapp-setup.md).
 
 ## What is implemented
 

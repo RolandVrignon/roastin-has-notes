@@ -13,6 +13,7 @@ const values = new Map(lines.filter((line) => !line.trim().startsWith("#") && li
 const defaults = {
   DATABASE_URL: "postgresql://roastin:change-me@localhost:5432/roastin?schema=public",
   NEXT_PUBLIC_APP_URL: "http://localhost",
+  APP_ADDRESS: "http://localhost",
   DEPLOYMENT_ENV: "local",
   ALLOW_DEMO_PAYMENTS: "true",
   ALLOW_DEV_OTP: "true",
@@ -20,6 +21,12 @@ const defaults = {
   TEMPORAL_PAYLOAD_MASTER_KEY: randomBytes(32).toString("base64"),
   PHONE_HASH_SECRET: randomBytes(32).toString("hex"),
   AUTH_SECRET: randomBytes(32).toString("hex"),
+  POSTGRES_USER: "roastin",
+  POSTGRES_PASSWORD: randomBytes(32).toString("base64url"),
+  POSTGRES_DB: "roastin",
+  TEMPORAL_POSTGRES_USER: "temporal",
+  TEMPORAL_POSTGRES_PASSWORD: randomBytes(32).toString("base64url"),
+  TEMPORAL_POSTGRES_DB: "temporal",
   WHATSAPP_VERIFY_TOKEN: randomBytes(24).toString("base64url"),
 };
 

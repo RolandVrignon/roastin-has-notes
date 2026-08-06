@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getPrisma } from "@/lib/db";
 import { fulfillCheckout } from "@/lib/stripe-fulfillment";
+import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
 
   let event: Stripe.Event;
   try {
-    event = new Stripe(apiKey).webhooks.constructEvent(await request.text(), signature, secret);
+    event = getStripe().webhooks.constructEvent(await request.text(), signature, secret);
   } catch {
     return NextResponse.json({ error: "Invalid webhook signature" }, { status: 400 });
   }

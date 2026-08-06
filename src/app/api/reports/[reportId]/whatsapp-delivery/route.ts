@@ -65,7 +65,10 @@ export async function POST(request: Request, context: { params: Promise<{ report
     const payload = await response.json() as { messages?: Array<{ id?: string }>; error?: { code?: number } };
     const providerMessageId = payload.messages?.[0]?.id;
     if (!response.ok || !providerMessageId) {
-      await db.whatsappDelivery.update({ where: { id: delivery.id }, data: { status: "FAILED", errorCode: String(payload.error?.code ?? response.status), lastStatusAt: new Date() } });
+      await db.$transaction([
+        db.whatsappDelivery.update({ where: { id: delivery.id }, data: { status: "FAILED", errorCode: String(payload.error?.code ?? response.status), lastStatusAt: new Date(), phoneCiphertext: null, phoneIv: null, phoneTag: null, phoneHash: null } }),
+        db.shareLink.update({ where: { id: link.id }, data: { revokedAt: new Date() } }),
+      ]);
       return NextResponse.json({ error: "WhatsApp could not accept the delivery" }, { status: 502 });
     }
     const sent = await db.whatsappDelivery.update({ where: { id: delivery.id }, data: { providerMessageId, status: "SENT", lastStatusAt: new Date() } });

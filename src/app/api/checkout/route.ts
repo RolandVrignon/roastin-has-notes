@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
 import { z } from "zod";
 import { getPrisma } from "@/lib/db";
 import { offerForLocale } from "@/lib/offers";
 import { viewerReportWhere } from "@/lib/report-access";
+import { checkoutIntegrationIdentifier, getStripe } from "@/lib/stripe";
 
 const inputSchema = z.object({ reportId: z.string().uuid() });
 
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const db = getPrisma();
     const report = await db.report.findFirst({ where: { id: reportId, ...access, deletedAt: null, status: "READY" } });
     if (!report) return NextResponse.json({ error: "Report not found" }, { status: 404 });
-    const offer = offerForLocale();
+    const offer = offerForLocale(report.locale);
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
 
     if (!process.env.STRIPE_SECRET_KEY) {
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     }
     if (!offer.stripePriceId) return NextResponse.json({ error: "This offer is not configured" }, { status: 503 });
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       success_url: `${origin}/r/${reportId}?session_id={CHECKOUT_SESSION_ID}`,
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
       client_reference_id: reportId,
       metadata: { reportId, offerCode: offer.code },
       line_items: [{ quantity: 1, price: offer.stripePriceId }],
+      integration_identifier: checkoutIntegrationIdentifier(),
     }, { idempotencyKey: `checkout:${reportId}` });
     if (!session.url) throw new Error("Stripe did not return a checkout URL");
     await db.payment.upsert({

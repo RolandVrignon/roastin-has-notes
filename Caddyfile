@@ -10,16 +10,15 @@
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 	}
 
-	reverse_proxy web:3000 {
-		health_uri /
-		health_interval 30s
-		health_timeout 5s
+	reverse_proxy {
+		dynamic a web 3000 {
+			refresh 5s
+			versions ipv4
+		}
+		lb_try_duration 5s
 	}
 
-	log {
-		output stdout
-		format console
-	}
 }

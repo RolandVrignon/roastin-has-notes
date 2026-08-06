@@ -1,19 +1,23 @@
 import type { ParsedConversation } from "@/domain/report";
 
 const emailPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-const phonePattern = /(?<!\w)(?:\+?\d[\s().-]?){8,15}(?!\w)/g;
+const phoneCandidatePattern = /(?<!\w)\+?\d[\d\s().-]{6,30}\d(?!\w)/g;
 const minorPattern = /\b(?:i\s*am|i['’]?m|aged?|j['’]?ai|tengo)\s+(?:[1-9]|1[0-7])\s*(?:years? old|ans?|años?)?\b/i;
 
 function redactText(value: string) {
   return value
     .replace(emailPattern, "[email redacted]")
-    .replace(phonePattern, "[phone redacted]")
+    .replace(phoneCandidatePattern, (candidate) => {
+      const digitCount = candidate.replace(/\D/g, "").length;
+      return digitCount >= 8 && digitCount <= 15 ? "[phone redacted]" : candidate;
+    })
     .replace(/BEGIN:VCARD[\s\S]*?END:VCARD/gi, "[contact card redacted]");
 }
 
 function safeAuthor(author: string) {
-  if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(author) || /(?:\+?\d[\s().-]?){8,15}/.test(author)) return "Participant";
-  return author.replace(emailPattern, "Participant").replace(phonePattern, "Participant").slice(0, 40);
+  const redacted = redactText(author);
+  if (redacted !== author) return "Participant";
+  return author.slice(0, 40);
 }
 
 export function sanitizeConversation(conversation: ParsedConversation): ParsedConversation {

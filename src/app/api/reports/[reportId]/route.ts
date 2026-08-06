@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 import { reportSchema } from "@/domain/report";
 import { getPrisma } from "@/lib/db";
 import { viewerReportWhere } from "@/lib/report-access";
+import { publicOfferForLocale } from "@/lib/offers";
 import { fulfillCheckout } from "@/lib/stripe-fulfillment";
+import { getStripe } from "@/lib/stripe";
+import { deleteEphemeralPayload } from "@/server/storage/ephemeral-payload";
+import { requestGenerationDeletion } from "@/temporal/client";
 
 const paramsSchema = z.object({ reportId: z.string().uuid() });
 
 async function verifyCheckout(reportId: string, sessionId: string) {
   if (!process.env.STRIPE_SECRET_KEY) return;
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const session = await stripe.checkout.sessions.retrieve(sessionId);
+  const session = await getStripe().checkout.sessions.retrieve(sessionId);
   if (session.client_reference_id !== reportId || session.payment_status !== "paid") return;
   await fulfillCheckout(session);
 }
@@ -27,7 +30,7 @@ export async function GET(request: Request, context: { params: Promise<{ reportI
     if (!report) return NextResponse.json({ error: "Report not found" }, { status: 404 });
     const unlocked = Boolean(report.entitlement);
     const payload = reportSchema.parse(unlocked ? report.content : report.preview);
-    return NextResponse.json({ report: payload, unlocked, canManage: true }, { headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ report: payload, unlocked, canManage: true, offer: publicOfferForLocale(report.locale) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Report not found" }, { status: 404 });
   }
@@ -38,11 +41,45 @@ export async function DELETE(_: Request, context: { params: Promise<{ reportId: 
     const { reportId } = paramsSchema.parse(await context.params);
     const access = await viewerReportWhere();
     if (!access) return NextResponse.json({ error: "Report not found" }, { status: 404 });
-    const result = await getPrisma().report.updateMany({
+    const db = getPrisma();
+    const report = await db.report.findFirst({
       where: { id: reportId, ...access, deletedAt: null },
-      data: { deletedAt: new Date(), status: "DELETED", preview: undefined, content: undefined },
+      select: { id: true, workflowId: true, payloadReference: true },
     });
-    if (!result.count) return NextResponse.json({ error: "Report not found" }, { status: 404 });
+    if (!report) return NextResponse.json({ error: "Report not found" }, { status: 404 });
+
+    await Promise.allSettled([
+      report.workflowId ? requestGenerationDeletion(report.workflowId) : Promise.resolve(),
+      report.payloadReference ? deleteEphemeralPayload(report.payloadReference) : Promise.resolve(),
+    ]);
+
+    await db.$transaction(async (tx) => {
+      await tx.shareLink.updateMany({ where: { reportId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.whatsappDelivery.updateMany({
+        where: { reportId },
+        data: { phoneCiphertext: null, phoneIv: null, phoneTag: null, phoneHash: null, status: "REVOKED", lastStatusAt: new Date() },
+      });
+      await tx.generationArtifact.deleteMany({ where: { reportId } });
+      await tx.report.update({
+        where: { id: reportId },
+        data: {
+          ownerTokenHash: "deleted",
+          userId: null,
+          chatName: "Deleted report",
+          status: "DELETED",
+          preview: Prisma.DbNull,
+          content: Prisma.DbNull,
+          messageCount: 0,
+          participantCount: 0,
+          dateRange: null,
+          publicErrorCode: null,
+          payloadReference: null,
+          payloadExpiresAt: null,
+          rawDeletedAt: new Date(),
+          deletedAt: new Date(),
+        },
+      });
+    }, { isolationLevel: "Serializable" });
     return new NextResponse(null, { status: 204 });
   } catch {
     return NextResponse.json({ error: "Report could not be deleted" }, { status: 500 });

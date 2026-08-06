@@ -1,8 +1,8 @@
 import Link from "next/link";
 
-export function Logo({ compact = false }: { compact?: boolean }) {
+export function Logo({ compact = false, href = "/" }: { compact?: boolean; href?: string }) {
   return (
-    <Link aria-label="Roastin Has Notes, home" className="inline-flex items-center gap-2" href="/">
+    <Link aria-label="Roastin Has Notes, home" className="inline-flex items-center gap-2" href={href}>
       <span className="starburst grid size-8 place-items-center text-[11px] font-black text-white">R</span>
       {!compact && (
         <span className="leading-none">

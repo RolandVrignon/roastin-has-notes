@@ -3,6 +3,7 @@ import { z } from "zod";
 import { reportSchema } from "@/domain/report";
 import { getPrisma } from "@/lib/db";
 import { hashSecret } from "@/lib/owner-session";
+import { prepareSharedReport } from "@/lib/shared-report";
 
 const paramsSchema = z.object({ token: z.string().min(20).max(100) });
 
@@ -14,7 +15,8 @@ export async function GET(_: Request, context: { params: Promise<{ token: string
       include: { report: true },
     });
     if (!link?.report.content) return NextResponse.json({ error: "This share link has expired or was revoked" }, { status: 404 });
-    return NextResponse.json({ report: reportSchema.parse(link.report.content), expiresAt: link.expiresAt.toISOString() }, { headers: { "Cache-Control": "private, no-store" } });
+    const report = prepareSharedReport(reportSchema.parse(link.report.content), link);
+    return NextResponse.json({ report, expiresAt: link.expiresAt.toISOString() }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "This share link has expired or was revoked" }, { status: 404 });
   }

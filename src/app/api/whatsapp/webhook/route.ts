@@ -22,6 +22,8 @@ const webhookSchema = z.object({
   }).passthrough()),
 });
 
+const deliveryStatusRank = { QUEUED: 0, SENT: 1, DELIVERED: 2, READ: 3, FAILED: 4, REVOKED: 5 } as const;
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get("hub.mode");
@@ -57,6 +59,7 @@ export async function POST(request: Request) {
       await tx.whatsappEvent.create({ data: { id: eventId } });
       const delivery = await tx.whatsappDelivery.findUnique({ where: { providerMessageId: status.id } });
       if (!delivery || (delivery.lastStatusAt && delivery.lastStatusAt > statusAt)) return;
+      if (delivery.lastStatusAt?.getTime() === statusAt.getTime() && deliveryStatusRank[delivery.status] >= deliveryStatusRank[mapped]) return;
       await tx.whatsappDelivery.update({
         where: { id: delivery.id },
         data: { status: mapped, lastStatusAt: statusAt, errorCode: status.errors?.[0]?.code ? String(status.errors[0].code) : null },

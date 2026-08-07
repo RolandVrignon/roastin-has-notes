@@ -2,20 +2,21 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPrisma } from "@/lib/db";
+import { locales } from "@/i18n/config";
 import { getOrCreateOwnerSession, ownerCookie } from "@/lib/owner-session";
 import { applyParticipantAliases, ParticipantAliasError } from "@/lib/participant-aliases";
 import { hasMinorSignal, sanitizeConversation } from "@/lib/privacy";
 import { readUserSession } from "@/lib/user-session";
 import { formatDateRange, parseWhatsApp } from "@/lib/whatsapp";
 import { createEphemeralPayload, deleteEphemeralPayload } from "@/server/storage/ephemeral-payload";
-import { CLASSIC_PROMPT_VERSION } from "@/server/reports/report-prompts";
+import { reportPromptVersion } from "@/server/reports/report-locales";
 import { startGenerateReportWorkflow } from "@/temporal/client";
 
 export const runtime = "nodejs";
 
 const inputSchema = z.object({
   chatName: z.string().trim().min(1).max(80),
-  locale: z.string().trim().min(2).max(10).default("en"),
+  locale: z.enum(locales).default("en"),
   chatType: z.enum(["partner", "friends", "best-friend", "family", "work", "other"]),
   context: z.string().trim().max(500).optional(),
   participantAliases: z.array(z.object({ sourceName: z.string().trim().min(1).max(80), displayName: z.string().trim().min(1).max(40) })).max(100).default([]),
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
     reportId = randomUUID();
     const workflowId = `generate-report-${reportId}`;
     const requestedAt = new Date();
-    const promptVersion = CLASSIC_PROMPT_VERSION;
+    const promptVersion = reportPromptVersion(input.locale);
 
     await getPrisma().report.create({
       data: {

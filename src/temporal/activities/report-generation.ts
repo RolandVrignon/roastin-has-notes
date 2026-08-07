@@ -1,6 +1,7 @@
 import { ApplicationFailure } from "@temporalio/activity";
 import { Prisma } from "@/generated/prisma/client";
 import { reportContentSchema, reportSchema, type ParsedConversation, type RoastReport } from "@/domain/report";
+import { isLocale } from "@/i18n/config";
 import { getPrisma } from "@/lib/db";
 import { createFallbackReport } from "@/lib/fallback-report";
 import { formatDateRange } from "@/lib/whatsapp";
@@ -8,6 +9,7 @@ import { requestStructuredCompletion, isRetryableOpenRouterError } from "@/serve
 import { analysisEvidenceIsAnchored, anchorAnalysisEvidence } from "@/server/reports/analysis-evidence";
 import { generationAnalysisSchema, type GenerationAnalysis } from "@/server/reports/generation-schemas";
 import { groundReportContent } from "@/server/reports/report-grounding";
+import { reportLanguageMatches, storedReportLanguageMatches } from "@/server/reports/report-language";
 import { analysisSystemPrompt, writingSystemPrompt } from "@/server/reports/report-prompts";
 import { deleteEphemeralPayload, ephemeralPayloadExists, readEphemeralPayload, type GenerationPayload } from "@/server/storage/ephemeral-payload";
 import { purgeExpiredEphemeralPayloads } from "@/server/storage/ephemeral-payload-cleanup";
@@ -101,6 +103,7 @@ export async function analyzeConversation(reportId: string, payloadReference: st
     const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, model: true } });
     if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, model: existing.model ?? undefined };
 
+    if (!isLocale(locale)) nonRetryable("REPORT_LOCALE_UNSUPPORTED");
     const payload = await readEphemeralPayload(payloadReference);
     const transcript = payload.conversation.messages.map(({ author, body, date }, messageIndex) => ({ messageIndex, author, body, date }));
     const completion = await requestStructuredCompletion({
@@ -151,14 +154,30 @@ export async function draftReport(reportId: string, payloadReference: string, an
       db.report.findUnique({ where: { id: reportId }, select: { createdAt: true } }),
     ]);
     if (!analysisArtifact || !reportRecord) nonRetryable("REPORT_INPUT_MISSING");
+    if (!isLocale(locale)) nonRetryable("REPORT_LOCALE_UNSUPPORTED");
     const analysis = generationAnalysisSchema.parse(analysisArtifact.content);
     const conversation = toConversation(payload);
-    const completion = await requestStructuredCompletion({
+    let completion = await requestStructuredCompletion({
       schemaName: "roast_report",
       schema: reportContentSchema,
       system: writingSystemPrompt(locale),
       user: JSON.stringify({ chatName: payload.chatName, chatType: payload.chatType, optionalContext: payload.context, analysis }),
     });
+    if (completion && !reportLanguageMatches(completion.value, locale)) {
+      const firstCompletion = completion;
+      const retry = await requestStructuredCompletion({
+        schemaName: "roast_report_language_recovery",
+        schema: reportContentSchema,
+        system: writingSystemPrompt(locale, true),
+        user: JSON.stringify({ chatName: payload.chatName, chatType: payload.chatType, optionalContext: payload.context, analysis }),
+      });
+      if (!retry || !reportLanguageMatches(retry.value, locale)) nonRetryable("REPORT_LANGUAGE_INVALID");
+      completion = {
+        ...retry,
+        inputTokens: (firstCompletion.inputTokens ?? 0) + (retry.inputTokens ?? 0) || undefined,
+        outputTokens: (firstCompletion.outputTokens ?? 0) + (retry.outputTokens ?? 0) || undefined,
+      };
+    }
     const report = completion ? reportSchema.parse({
       ...groundReportContent(completion.value, analysis),
       id: reportId,
@@ -185,6 +204,7 @@ export async function validateReportArtifact(reportId: string, artifactId: strin
     const artifact = await getPrisma().generationArtifact.findFirst({ where: { id: artifactId, reportId, kind: "REPORT" }, select: { content: true } });
     if (!artifact) nonRetryable("REPORT_ARTIFACT_MISSING");
     const report = reportSchema.parse(artifact.content);
+    if (!isLocale(report.locale) || !storedReportLanguageMatches(report, report.locale)) nonRetryable("REPORT_LANGUAGE_INVALID");
     const serialized = JSON.stringify(reportContentSchema.parse(report));
     if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(serialized) || /(?<!\w)(?:\+?\d[\s().-]?){8,15}(?!\w)/.test(serialized)) nonRetryable("REPORT_PRIVACY_VALIDATION_FAILED");
     return { artifactId, evidenceCount: report.participants.reduce((total, participant) => total + participant.evidence.length, 0) };

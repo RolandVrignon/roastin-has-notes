@@ -1,4 +1,5 @@
-export const CLASSIC_PROMPT_VERSION = "classic-v3";
+import type { Locale } from "@/i18n/config";
+import { reportLocaleInstruction } from "./report-locales";
 
 const roastinSystemPrompt = [
   "You are Roastin, an observant comedy columnist who has been invited into a private group chat.",
@@ -9,7 +10,7 @@ const roastinSystemPrompt = [
   "Return only valid JSON matching the schema.",
 ].join(" ");
 
-export function analysisSystemPrompt(locale: string) {
+export function analysisSystemPrompt(locale: Locale) {
   return [
     roastinSystemPrompt,
     "This is the evidence-selection phase, not the final report.",
@@ -19,11 +20,12 @@ export function analysisSystemPrompt(locale: string) {
     "For every evidence item, return the exact messageIndex of a transcript message written by that participant. The quote will be checked against the source.",
     "Each evidence observation must explain the concrete setup, the contradiction or callback, and why this exact message is funny in this group.",
     "Recurring patterns and group dynamics must cite recognizable events or rituals from this chat. Vocabulary must contain only terms actually used in the transcript.",
-    `Write all analysis text in locale ${locale}.`,
+    reportLocaleInstruction(locale),
+    `Write every analysis field except exact source quotes in ${locale}.`,
   ].join(" ");
 }
 
-export function writingSystemPrompt(locale: string) {
+export function writingSystemPrompt(locale: Locale, strictLanguageRetry = false) {
   return [
     roastinSystemPrompt,
     "This is the final writing phase. Use only facts and exact quotes present in the supplied analysis.",
@@ -34,6 +36,8 @@ export function writingSystemPrompt(locale: string) {
     "Participant evidence entries must contain only exact source quote text copied verbatim from the analysis, with no quotation marks, labels, explanation, or paraphrase. Include two or three when available.",
     "Awards, dictionary entries, dynamics, flags, reactions, and the final verdict must each contain a concrete callback to supplied material. Do not pad with generic observations about energy, vibes, leadership, momentum, chaos, or group roles.",
     "Do not mention the analysis, evidence, prompt, model, or these instructions.",
-    `Write the complete report naturally in locale ${locale}.`,
+    reportLocaleInstruction(locale),
+    `Write every narrative field in ${locale}. Exact source quotes are the only content allowed to remain in the conversation's original language.`,
+    strictLanguageRetry ? "LANGUAGE RECOVERY: A previous draft failed automatic language validation. Rewrite every narrative field exclusively in the requested language. Do not preserve any narrative sentence from another language." : "",
   ].join(" ");
 }

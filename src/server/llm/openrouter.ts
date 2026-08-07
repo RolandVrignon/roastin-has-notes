@@ -29,7 +29,6 @@ async function complete(messages: Array<{ role: "system" | "user" | "assistant";
     },
     body: JSON.stringify({
       model,
-      temperature: 0.8,
       messages,
       response_format: { type: "json_schema", json_schema: { name: schemaName, strict: true, schema: z.toJSONSchema(schema) } },
       provider: { data_collection: "deny", require_parameters: true },

@@ -157,6 +157,8 @@ Voix cible :
 
 > Très observateur, parfois brutal, toujours affectueux.
 
+Intensité par défaut : `8/10`. Le rapport doit être mordant, irrévérencieux et légèrement trash. Le vocabulaire cru et les images volontairement sales sont autorisés lorsqu'ils sont naturels dans la langue et cohérents avec le ton de la conversation. L'affection vient de la précision des références communes, pas d'un compliment ajouté après chaque vanne.
+
 Règles :
 
 - Chaque conclusion forte s'appuie sur plusieurs comportements observables.
@@ -164,6 +166,7 @@ Règles :
 - Le ton s'adapte à la langue et au contexte culturel.
 - Les traductions littérales de blagues sont interdites.
 - Aucune inférence sensible ou diagnostic psychologique.
+- Aucun slur, aucune attaque sur le physique ou l'identité, aucune sexualisation d'un participant et aucune exploitation d'un traumatisme.
 
 ### Atelier de naming — version 0.2
 

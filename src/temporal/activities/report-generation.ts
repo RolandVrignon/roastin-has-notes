@@ -1,6 +1,6 @@
 import { ApplicationFailure } from "@temporalio/activity";
 import { Prisma } from "@/generated/prisma/client";
-import { reportContentSchema, reportSchema, type ParsedConversation, type RoastReport } from "@/domain/report";
+import { generatedReportContentSchema, reportContentSchema, reportSchema, type ParsedConversation, type RoastReport } from "@/domain/report";
 import { isLocale } from "@/i18n/config";
 import { getPrisma } from "@/lib/db";
 import { createFallbackReport } from "@/lib/fallback-report";
@@ -160,7 +160,7 @@ export async function draftReport(reportId: string, payloadReference: string, an
     const conversation = toConversation(payload);
     let completion = await requestStructuredCompletion({
       schemaName: "roast_report",
-      schema: reportContentSchema,
+      schema: generatedReportContentSchema,
       system: writingSystemPrompt(locale),
       user: JSON.stringify({ chatName: payload.chatName, chatType: payload.chatType, optionalContext: payload.context, analysis }),
     });
@@ -168,7 +168,7 @@ export async function draftReport(reportId: string, payloadReference: string, an
       const firstCompletion = completion;
       const retry = await requestStructuredCompletion({
         schemaName: "roast_report_language_recovery",
-        schema: reportContentSchema,
+        schema: generatedReportContentSchema,
         system: writingSystemPrompt(locale, true),
         user: JSON.stringify({ chatName: payload.chatName, chatType: payload.chatType, optionalContext: payload.context, analysis }),
       });

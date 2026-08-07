@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPrisma } from "@/lib/db";
+import { hasEntitlement } from "@/lib/entitlements";
 import { viewerReportWhere } from "@/lib/report-access";
 
 export async function GET() {
@@ -9,7 +10,7 @@ export async function GET() {
     where: { ...access, deletedAt: null },
     orderBy: { createdAt: "desc" },
     take: 50,
-    select: { id: true, chatName: true, status: true, createdAt: true, messageCount: true, participantCount: true, entitlement: { select: { id: true } }, deliveries: { take: 1, orderBy: { createdAt: "desc" }, select: { status: true } } },
+    select: { id: true, chatName: true, status: true, createdAt: true, messageCount: true, participantCount: true, entitlements: { select: { offerCode: true } }, deliveries: { take: 1, orderBy: { createdAt: "desc" }, select: { status: true } } },
   });
-  return NextResponse.json({ reports: reports.map(({ entitlement, deliveries, ...report }) => ({ ...report, unlocked: Boolean(entitlement), deliveryStatus: deliveries[0]?.status ?? null })) }, { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json({ reports: reports.map(({ entitlements, deliveries, ...report }) => ({ ...report, unlocked: hasEntitlement(entitlements, "classic"), quizUnlocked: hasEntitlement(entitlements, "quiz"), deliveryStatus: deliveries[0]?.status ?? null })) }, { headers: { "Cache-Control": "private, no-store" } });
 }

@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import { getPrisma } from "@/lib/db";
+import { offerKindForCode } from "@/lib/entitlements";
 import { offerByCode } from "@/lib/offers";
 import { deliverPaidReport } from "@/lib/whatsapp-delivery";
 
@@ -7,7 +8,8 @@ export async function fulfillCheckout(session: Stripe.Checkout.Session, eventId?
   const reportId = session.client_reference_id;
   const offerCode = session.metadata?.offerCode;
   const offer = offerCode ? offerByCode(offerCode) : null;
-  if (!reportId || !offer) return false;
+  const offerKind = offerCode ? offerKindForCode(offerCode) : null;
+  if (!reportId || !offer || !offerKind || session.amount_total !== offer.amount || session.currency !== offer.currency) return false;
   const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
   const isPaid = session.payment_status === "paid" || session.payment_status === "no_payment_required";
   const db = getPrisma();
@@ -31,17 +33,14 @@ export async function fulfillCheckout(session: Stripe.Checkout.Session, eventId?
     });
     if (!isPaid) return { fulfilled: false } as const;
     await tx.entitlement.upsert({
-      where: { reportId },
+      where: { reportId_offerCode: { reportId, offerCode: offer.code } },
       create: { reportId, sourcePaymentId: payment.id, offerCode: offer.code },
       update: {},
     });
-    await tx.report.update({
-      where: { id: reportId },
-      data: { paidAt: new Date() },
-    });
-    return { fulfilled: true } as const;
+    if (offerKind === "classic") await tx.report.update({ where: { id: reportId }, data: { paidAt: new Date() } });
+    return { fulfilled: true, offerKind } as const;
   }, { isolationLevel: "Serializable" });
 
-  if (result.fulfilled) await deliverPaidReport(reportId).catch(() => undefined);
+  if (result.fulfilled && result.offerKind === "classic") await deliverPaidReport(reportId).catch(() => undefined);
   return result.fulfilled;
 }

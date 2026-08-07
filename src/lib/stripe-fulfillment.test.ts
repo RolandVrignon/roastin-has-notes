@@ -87,6 +87,18 @@ describe("Stripe checkout fulfillment", () => {
 
     await expect(fulfillCheckout(checkout({ metadata: {} }), "evt_invalid")).resolves.toBe(false);
     await expect(fulfillCheckout(checkout({ client_reference_id: null }), "evt_invalid_2")).resolves.toBe(false);
+    await expect(fulfillCheckout(checkout({ amount_total: 1 }), "evt_invalid_3")).resolves.toBe(false);
     expect(getPrismaMock).not.toHaveBeenCalled();
+  });
+
+  it("unlocks the quiz without changing the Classic payment state or sending WhatsApp", async () => {
+    const { db, tx } = database();
+    getPrismaMock.mockReturnValue(db);
+
+    await expect(fulfillCheckout(checkout({ metadata: { offerCode: "quiz_eur" }, amount_total: 499, currency: "eur" }), "evt_quiz")).resolves.toBe(true);
+
+    expect(tx.entitlement.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { reportId_offerCode: { reportId: "report-123", offerCode: "quiz_eur" } } }));
+    expect(tx.report.update).not.toHaveBeenCalled();
+    expect(deliverPaidReportMock).not.toHaveBeenCalled();
   });
 });

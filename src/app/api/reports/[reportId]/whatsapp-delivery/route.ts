@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPrisma } from "@/lib/db";
+import { classicOfferCodes } from "@/lib/entitlements";
 import { viewerReportWhere } from "@/lib/report-access";
 import { deliverPaidReport } from "@/lib/whatsapp-delivery";
 
@@ -26,7 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ report
     const access = await viewerReportWhere();
     if (!access) return NextResponse.json({ error: "Report not found" }, { status: 404 });
     const db = getPrisma();
-    const report = await db.report.findFirst({ where: { id: reportId, ...access, entitlement: { isNot: null }, deletedAt: null, userId: { not: null } } });
+    const report = await db.report.findFirst({ where: { id: reportId, ...access, entitlements: { some: { offerCode: { in: [...classicOfferCodes] } } }, deletedAt: null, userId: { not: null } } });
     if (!report) return NextResponse.json({ error: "Unlock the report before requesting delivery" }, { status: 403 });
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
     const delivery = await deliverPaidReport(reportId, origin);

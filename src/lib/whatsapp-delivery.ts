@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { decryptSensitive } from "@/lib/data-encryption";
 import { getPrisma } from "@/lib/db";
+import { classicOfferCodes } from "@/lib/entitlements";
 import { hashSecret } from "@/lib/owner-session";
 import { sendWhatsappTemplate, whatsappLanguage } from "@/lib/whatsapp-cloud";
 
@@ -9,7 +10,7 @@ const activeStatuses = ["QUEUED", "SENT", "DELIVERED", "READ"] as const;
 export async function deliverPaidReport(reportId: string, origin = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000") {
   const db = getPrisma();
   const report = await db.report.findFirst({
-    where: { id: reportId, entitlement: { isNot: null }, deletedAt: null, userId: { not: null } },
+    where: { id: reportId, entitlements: { some: { offerCode: { in: [...classicOfferCodes] } } }, deletedAt: null, userId: { not: null } },
     select: {
       id: true,
       locale: true,

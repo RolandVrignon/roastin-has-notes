@@ -48,13 +48,25 @@ export function createFallbackReport(conversation: ParsedConversation, chatName:
   const copy = copies[locale] ?? en;
   const top = conversation.participants[0]?.name ?? "Someone";
   const quiet = conversation.participants.at(-1)?.name ?? top;
-  const participants = conversation.participants.map((participant, index) => ({
-    ...participant,
-    title: copy.titles[index % copy.titles.length],
-    portrait: copy.portrait(participant.name, participant.share, index === 0),
-    evidence: conversation.messages.filter((message) => message.author === participant.name && message.body.length > 12).slice(0, 2).map((message) => `«${message.body.slice(0, 120)}»`),
-    finalLine: index === 0 ? copy.firstLine : copy.otherLine,
-  }));
+  const participants = conversation.participants.map((participant, index) => {
+    const title = copy.titles[index % copy.titles.length];
+    const portrait = copy.portrait(participant.name, participant.share, index === 0);
+    const finalLine = index === 0 ? copy.firstLine : copy.otherLine;
+    return {
+      ...participant,
+      title,
+      portrait,
+      evidence: conversation.messages.filter((message) => message.author === participant.name && message.body.length > 12).slice(0, 2).map((message) => `«${message.body.slice(0, 120)}»`),
+      finalLine,
+      personality: {
+        archetype: title,
+        summary: portrait,
+        traits: [finalLine, `${participant.share}%`],
+        strength: finalLine,
+        chaosTrigger: copy.otherLine,
+      },
+    };
+  });
   return {
     id: randomUUID(), title: copy.title(chatName), subtitle: copy.subtitle, chatName, locale, createdAt: new Date().toISOString(),
     stats: { messageCount: conversation.messages.length, participantCount: conversation.participants.length, dateRange: formatDateRange(conversation.firstDate, conversation.lastDate, locale) },

@@ -20,7 +20,7 @@ export const reportLocaleProfiles = {
   nl: { version: "nl-v1", language: "nl", label: "Dutch", instruction: "Write only in natural contemporary Dutch. Use informal ‘jij/je’ for an individual participant and ‘jullie’ for the group. Preserve names, brands, slang, and exact source quotes without translating them. Avoid literal English syntax." },
 } satisfies Record<Locale, LocaleProfile>;
 
-export const ROAST_PROMPT_VERSION = "classic-v5";
+export const ROAST_PROMPT_VERSION = "classic-v6";
 
 export function reportPromptVersion(locale: Locale) {
   return `${ROAST_PROMPT_VERSION}+${reportLocaleProfiles[locale].version}`;

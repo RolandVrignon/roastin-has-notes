@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { reportSchema } from "@/domain/report";
 import { getPrisma } from "@/lib/db";
+import { hasEntitlement } from "@/lib/entitlements";
 import { viewerReportWhere } from "@/lib/report-access";
 import { publicOfferForLocale } from "@/lib/offers";
 import { fulfillCheckout } from "@/lib/stripe-fulfillment";
@@ -26,11 +27,15 @@ export async function GET(request: Request, context: { params: Promise<{ reportI
     if (!access) return NextResponse.json({ error: "Report not found" }, { status: 404 });
     const sessionId = new URL(request.url).searchParams.get("session_id");
     if (sessionId) await verifyCheckout(reportId, sessionId);
-    const report = await getPrisma().report.findFirst({ where: { id: reportId, ...access, deletedAt: null, status: "READY" }, include: { entitlement: true } });
+    const report = await getPrisma().report.findFirst({
+      where: { id: reportId, ...access, deletedAt: null, status: "READY" },
+      include: { entitlements: { select: { offerCode: true } } },
+    });
     if (!report) return NextResponse.json({ error: "Report not found" }, { status: 404 });
-    const unlocked = Boolean(report.entitlement);
+    const unlocked = hasEntitlement(report.entitlements, "classic");
+    const quizUnlocked = hasEntitlement(report.entitlements, "quiz");
     const payload = reportSchema.parse(unlocked ? report.content : report.preview);
-    return NextResponse.json({ report: payload, unlocked, canManage: true, offer: publicOfferForLocale(report.locale) }, { headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ report: payload, unlocked, quizUnlocked, canManage: true, offer: publicOfferForLocale(report.locale), quizOffer: publicOfferForLocale(report.locale, "quiz") }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Report not found" }, { status: 404 });
   }

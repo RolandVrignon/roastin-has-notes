@@ -112,7 +112,7 @@ model Report {
   user                User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   payments            Payment[]
   shareLinks          ShareLink[]
-  entitlement         Entitlement?
+  entitlements        Entitlement[]
   deliveries          WhatsappDelivery[]
   generationArtifacts GenerationArtifact[]
 
@@ -160,13 +160,14 @@ model Payment {
 
 model Entitlement {
   id              String   @id @default(uuid()) @db.Uuid
-  reportId        String   @unique @map("report_id") @db.Uuid
+  reportId        String   @map("report_id") @db.Uuid
   sourcePaymentId String   @unique @map("source_payment_id") @db.Uuid
   offerCode       String   @map("offer_code")
   createdAt       DateTime @default(now()) @map("created_at")
   report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
   sourcePayment   Payment  @relation(fields: [sourcePaymentId], references: [id], onDelete: Restrict)
 
+  @@unique([reportId, offerCode])
   @@map("entitlements")
 }
 

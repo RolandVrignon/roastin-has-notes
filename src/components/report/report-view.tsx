@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Award, Check, Flag, LoaderCircle, LockKeyhole, MessageCircleMore, RotateCcw, Settings, Share2, Sparkles, Star, Users } from "lucide-react";
+import { ArrowRight, Award, Brain, Check, Flag, Gamepad2, LoaderCircle, LockKeyhole, MessageCircleMore, RotateCcw, Settings, Share2, Sparkles, Star, Users, Zap } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { reportSchema, type RoastReport } from "@/domain/report";
 import { reportUi, type ReportUi } from "@/i18n/report-ui";
 import { WhatsappDeliveryCard } from "@/components/report/whatsapp-delivery-card";
 import { WhatsappMessage } from "@/components/report/whatsapp-message";
 import { buildPortraitBlocks } from "@/lib/portrait-layout";
+import { reportQuizSchema, type ReportQuiz } from "@/lib/report-quiz";
 
 export function ReportView({ reportId }: { reportId: string }) {
   const search = useSearchParams();
@@ -17,7 +18,9 @@ export function ReportView({ reportId }: { reportId: string }) {
   const [missing, setMissing] = useState(false);
   const [generation, setGeneration] = useState<{ status: string; stage: string; progress: number; errorCode?: string | null }>({ status: "GENERATING", stage: "QUEUED", progress: 5 });
   const [unlocked, setUnlocked] = useState(false);
+  const [quizUnlocked, setQuizUnlocked] = useState(false);
   const [offer, setOffer] = useState<{ formattedPrice: string } | null>(null);
+  const [quizOffer, setQuizOffer] = useState<{ formattedPrice: string } | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -42,11 +45,13 @@ export function ReportView({ reportId }: { reportId: string }) {
         }
 
         const response = await fetch(`/api/reports/${reportId}${query}`, { cache: "no-store", signal: controller.signal });
-        const payload = await response.json() as { report?: RoastReport; unlocked?: boolean; offer?: { formattedPrice: string } };
+        const payload = await response.json() as { report?: RoastReport; unlocked?: boolean; quizUnlocked?: boolean; offer?: { formattedPrice: string }; quizOffer?: { formattedPrice: string } };
         if (!response.ok || !payload.report) throw new Error("missing");
         setReport(reportSchema.parse(payload.report));
         setUnlocked(Boolean(payload.unlocked));
+        setQuizUnlocked(Boolean(payload.quizUnlocked));
         setOffer(payload.offer ?? null);
+        setQuizOffer(payload.quizOffer ?? null);
       } catch (error) {
         if (error instanceof Error && error.name !== "AbortError") setMissing(true);
       }
@@ -59,10 +64,10 @@ export function ReportView({ reportId }: { reportId: string }) {
     };
   }, [reportId, search]);
 
-  async function checkout() {
+  async function checkout(product: "classic" | "quiz" = "classic") {
     setCheckoutLoading(true);
     setCheckoutError("");
-    const response = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reportId }) });
+    const response = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reportId, product }) });
     const payload = await response.json() as { checkoutUrl?: string; error?: string };
     if (payload.checkoutUrl) window.location.href = payload.checkoutUrl;
     else { setCheckoutError(payload.error ?? "Checkout could not be started"); setCheckoutLoading(false); }
@@ -98,7 +103,7 @@ export function ReportView({ reportId }: { reportId: string }) {
           <div className="mx-auto max-w-4xl px-5"><div className="flex items-end justify-between"><div><span className="eyebrow">{ui.cast}</span><h2 className="display mt-4 text-5xl font-black tracking-[-.045em] md:text-6xl">{ui.portraits}</h2></div><Users className="hidden text-[#e84b20] md:block" size={48} /></div><div className="mt-10 space-y-6">{report.participants.slice(0, unlocked ? undefined : 2).map((participant, index) => <section className="overflow-hidden rounded-3xl border-2 border-[#112b4d] bg-[#fffaf0] shadow-[6px_7px_0_#112b4d]" key={participant.name}><div className={`h-3 ${["bg-[#e84b20]", "bg-[#f6a913]", "bg-[#a9c9a9]"][index % 3]}`} /><div className="p-7 md:p-10"><div className="flex flex-wrap items-start justify-between gap-4"><div><span className="text-[10px] font-black uppercase tracking-[.15em] text-[#e84b20]">Portrait {String(index + 1).padStart(2, "0")}</span><h3 className="display mt-2 text-4xl font-black md:text-5xl">{participant.name}</h3></div><span className="rounded-full bg-[#112b4d] px-4 py-2 text-xs font-black uppercase tracking-wide text-white">{participant.title}</span></div><ParticipantPortrait evidence={participant.evidence} name={participant.name} portrait={participant.portrait} /><p className="mt-7 border-t border-[#112b4d]/15 pt-6 font-black text-[#e84b20]">{participant.finalLine}</p></div></section>)}</div></div>
         </section>
 
-        {!unlocked ? <Paywall error={checkoutError} loading={checkoutLoading} onCheckout={checkout} price={offer?.formattedPrice ?? "$12.99"} ui={ui} /> : <><FullReport report={report} ui={ui} /><WhatsappDeliveryCard locale={report.locale} reportId={reportId} /></>}
+        {!unlocked ? <Paywall error={checkoutError} loading={checkoutLoading} onCheckout={() => checkout("classic")} price={offer?.formattedPrice ?? "$12.99"} ui={ui} /> : <><FullReport report={report} ui={ui} /><QuizAddon error={checkoutError} loading={checkoutLoading} onCheckout={() => checkout("quiz")} price={quizOffer?.formattedPrice ?? "€4.99"} reportId={reportId} ui={ui} unlocked={quizUnlocked} /><WhatsappDeliveryCard locale={report.locale} reportId={reportId} /></>}
       </article>
     </main>
   );
@@ -116,11 +121,64 @@ function Paywall({ error, loading, onCheckout, price, ui }: { error: string; loa
 
 export function FullReport({ report, ui = reportUi(report.locale) }: { report: RoastReport; ui?: ReportUi }) {
   return <>
+    <section className="border-b border-[#112b4d]/15 bg-[#f8efd9] py-20"><div className="mx-auto max-w-5xl px-5"><SectionHeading icon={Brain} kicker={ui.personalitiesKicker} title={ui.personalitiesTitle} /><div className="mt-10 grid gap-5 md:grid-cols-2">{report.participants.map((participant) => {
+      const personality = participant.personality ?? { archetype: participant.title, summary: participant.portrait.split(/(?<=[.!?])\s/)[0] ?? participant.portrait, traits: [], strength: participant.finalLine, chaosTrigger: participant.title };
+      return <article className="card overflow-hidden p-0" key={participant.name}><div className="border-b border-[#112b4d]/10 bg-white p-6"><span className="text-[10px] font-black uppercase tracking-[.15em] text-[#e84b20]">{participant.name}</span><h3 className="display mt-2 text-3xl font-black">{personality.archetype}</h3><p className="mt-4 leading-7 text-[#3b4d5f]">{personality.summary}</p></div><div className="grid gap-5 p-6 sm:grid-cols-2"><div><strong className="flex items-center gap-2 text-xs uppercase tracking-wide"><Sparkles size={15} className="text-[#e84b20]" />{ui.personalityStrength}</strong><p className="mt-2 text-sm leading-6 text-[#3b4d5f]">{personality.strength}</p></div><div><strong className="flex items-center gap-2 text-xs uppercase tracking-wide"><Zap size={15} className="text-[#f6a913]" />{ui.personalityChaos}</strong><p className="mt-2 text-sm leading-6 text-[#3b4d5f]">{personality.chaosTrigger}</p></div></div>{personality.traits.length > 0 && <div className="flex flex-wrap gap-2 border-t border-[#112b4d]/10 px-6 py-5">{personality.traits.map((trait) => <span className="rounded-full bg-[#112b4d] px-3 py-1.5 text-xs font-bold text-white" key={trait}>{trait}</span>)}</div>}</article>;
+    })}</div></div></section>
     <section className="mx-auto max-w-4xl px-5 py-20"><SectionHeading icon={Award} kicker={ui.awardsKicker} title={ui.awardsTitle} /><div className="mt-10 grid gap-5 md:grid-cols-3">{report.awards.map((award, index) => <article className="card p-6" key={award.title}><span className="display text-5xl font-black text-[#e84b20]/20">0{index + 1}</span><h3 className="display mt-4 text-2xl font-black">{award.title}</h3><strong className="mt-4 block text-[#e84b20]">{award.winner}</strong><p className="mt-3 text-sm leading-6 text-[#3b4d5f]">{award.reason}</p></article>)}</div></section>
     <section className="border-y border-[#112b4d]/15 bg-[#f8efd9] py-20"><div className="mx-auto max-w-4xl px-5"><SectionHeading icon={MessageCircleMore} kicker={ui.dictionaryKicker} title={ui.dictionaryTitle} /><div className="mt-10 divide-y divide-[#112b4d]/15 border-y border-[#112b4d]/15">{report.dictionary.map((entry) => <div className="grid gap-2 py-6 md:grid-cols-[.35fr_.65fr]" key={entry.term}><strong className="display text-2xl">“{entry.term}”</strong><p className="text-[#3b4d5f]">{entry.meaning}</p></div>)}</div></div></section>
     <section className="mx-auto grid max-w-5xl gap-8 px-5 py-20 md:grid-cols-2"><div><SectionHeading icon={Sparkles} kicker={ui.dynamicsKicker} title={ui.dynamicsTitle} /><div className="mt-8 space-y-4">{report.dynamics.map((item, index) => <p className="flex gap-4 text-lg leading-7" key={item}><span className="display text-2xl font-black text-[#e84b20]">{index + 1}.</span>{item}</p>)}</div></div><div><SectionHeading icon={Flag} kicker={ui.flagsKicker} title={ui.flagsTitle} /><div className="mt-8 space-y-4">{Object.entries(report.flags).map(([colour, flags]) => <div className="rounded-2xl border border-[#112b4d]/15 bg-white p-5" key={colour}><strong className="capitalize">{colour} flags</strong>{flags.map((flag) => <p className="mt-2 text-sm text-[#3b4d5f]" key={flag}>• {flag}</p>)}</div>)}</div></div></section>
     <section className="bg-[#e84b20] px-5 py-20 text-center text-white md:py-28"><Star className="mx-auto text-[#f6a913]" fill="currentColor" size={34} /><h2 className="display mt-5 text-3xl font-black tracking-[-.035em] md:text-5xl">{ui.finalKicker}</h2><p className="mx-auto mt-6 max-w-3xl text-lg font-medium leading-[1.65] md:text-xl">{report.finalVerdict}</p><button className="btn btn-cream mt-10" onClick={() => navigator.share?.({ title: report.title, url: window.location.href })} type="button">{ui.shareGroup} <Share2 size={18} /></button></section>
   </>;
+}
+
+function QuizAddon({ error, loading, onCheckout, price, reportId, ui, unlocked }: { error: string; loading: boolean; onCheckout: () => void; price: string; reportId: string; ui: ReportUi; unlocked: boolean }) {
+  const [quiz, setQuiz] = useState<ReportQuiz | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [started, setStarted] = useState(false);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [score, setScore] = useState(0);
+
+  useEffect(() => {
+    if (!unlocked) return;
+    const controller = new AbortController();
+    void fetch(`/api/reports/${reportId}/quiz`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json() as { quiz?: unknown; error?: string };
+        if (!response.ok || !payload.quiz) throw new Error(payload.error ?? "Quiz unavailable");
+        setQuiz(reportQuizSchema.parse(payload.quiz));
+      })
+      .catch((fetchError: unknown) => { if (!(fetchError instanceof Error && fetchError.name === "AbortError")) setLoadError(fetchError instanceof Error ? fetchError.message : "Quiz unavailable"); });
+    return () => controller.abort();
+  }, [reportId, unlocked]);
+
+  function choose(choiceIndex: number) {
+    if (!quiz || selected !== null) return;
+    setSelected(choiceIndex);
+    if (choiceIndex === quiz.questions[questionIndex].correctIndex) setScore((value) => value + 1);
+  }
+
+  function advance() {
+    if (!quiz) return;
+    setSelected(null);
+    setQuestionIndex((value) => value + 1);
+  }
+
+  function restart() {
+    setStarted(true); setQuestionIndex(0); setSelected(null); setScore(0);
+  }
+
+  if (!unlocked) return <section className="relative overflow-hidden bg-[#f6a913] px-5 py-20"><div className="mx-auto max-w-4xl rounded-[2rem] border-2 border-[#112b4d] bg-[#fffaf0] p-8 text-center shadow-[8px_9px_0_#112b4d] md:p-12"><span className="eyebrow justify-center"><Gamepad2 size={16} />{ui.quizKicker}</span><h2 className="display mt-5 text-4xl font-black md:text-6xl">{ui.quizTitle}</h2><p className="mx-auto mt-5 max-w-2xl leading-7 text-[#3b4d5f]">{ui.quizLockedBody}</p><div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row"><strong className="display text-4xl font-black">{price}</strong><button className="btn btn-primary" disabled={loading} onClick={onCheckout} type="button">{loading ? <LoaderCircle className="animate-spin" size={18} /> : <>{ui.quizUnlock} <ArrowRight size={18} /></>}</button></div>{error && <p className="mt-4 text-sm font-bold text-red-700">{error}</p>}</div></section>;
+
+  if (loadError) return <section className="bg-[#f6a913] px-5 py-16 text-center"><p className="font-bold text-red-900">{loadError}</p></section>;
+  if (!quiz) return <section className="grid min-h-64 place-items-center bg-[#f6a913]"><LoaderCircle className="animate-spin" size={32} /></section>;
+  const finished = questionIndex >= quiz.questions.length;
+  if (!started) return <section className="bg-[#f6a913] px-5 py-20 text-center"><Gamepad2 className="mx-auto" size={44} /><span className="eyebrow mt-5 justify-center">{ui.quizKicker}</span><h2 className="display mx-auto mt-5 max-w-3xl text-5xl font-black md:text-7xl">{quiz.title}</h2><p className="mt-4 font-bold">{quiz.questions.length} questions</p><button className="btn btn-primary mt-8" onClick={() => setStarted(true)} type="button">{ui.quizStart} <ArrowRight size={18} /></button></section>;
+  if (finished) return <section className="bg-[#f6a913] px-5 py-20 text-center"><Star className="mx-auto" fill="currentColor" size={44} /><span className="eyebrow mt-5 justify-center">{ui.quizScore}</span><p className="display mt-5 text-7xl font-black">{score}/{quiz.questions.length}</p><button className="btn btn-primary mt-8" onClick={restart} type="button">{ui.quizRestart} <RotateCcw size={18} /></button></section>;
+  const question = quiz.questions[questionIndex];
+  const correct = selected === question.correctIndex;
+  return <section className="bg-[#f6a913] px-5 py-20"><div className="mx-auto max-w-3xl rounded-[2rem] border-2 border-[#112b4d] bg-[#fffaf0] p-7 shadow-[8px_9px_0_#112b4d] md:p-10"><div className="flex items-center justify-between text-xs font-black uppercase tracking-wide"><span>{questionIndex + 1}/{quiz.questions.length}</span><span>{score} pts</span></div><h2 className="display mt-6 text-3xl font-black leading-tight md:text-5xl">{question.prompt}</h2><div className="mt-8 grid gap-3">{question.choices.map((choice, index) => { const state = selected === null ? "border-[#112b4d]/20 bg-white" : index === question.correctIndex ? "border-green-700 bg-green-50" : index === selected ? "border-red-700 bg-red-50" : "border-[#112b4d]/10 bg-white opacity-60"; return <button className={`rounded-2xl border-2 p-4 text-left font-bold transition ${state}`} disabled={selected !== null} key={choice} onClick={() => choose(index)} type="button">{choice}</button>; })}</div>{selected !== null && <div className={`mt-6 rounded-2xl p-5 ${correct ? "bg-green-100 text-green-950" : "bg-red-100 text-red-950"}`}><strong>{correct ? ui.quizCorrect : ui.quizWrong}</strong><p className="mt-2 text-sm leading-6">{question.explanation}</p><button className="btn btn-primary mt-5" onClick={advance} type="button">{questionIndex === quiz.questions.length - 1 ? ui.quizFinish : ui.quizNext} <ArrowRight size={18} /></button></div>}</div></section>;
 }
 
 function SectionHeading({ icon: Icon, kicker, title }: { icon: typeof Award; kicker: string; title: string }) {

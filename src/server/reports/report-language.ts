@@ -16,7 +16,7 @@ function narrativeText(input: unknown) {
   const report = reportContentSchema.parse(input);
   return [
     report.title, report.subtitle, report.opening,
-    ...report.participants.flatMap(({ title, portrait, finalLine }) => [title, portrait, finalLine]),
+    ...report.participants.flatMap(({ title, portrait, finalLine, personality }) => [title, portrait, finalLine, personality?.archetype, personality?.summary, ...(personality?.traits ?? []), personality?.strength, personality?.chaosTrigger].filter((value): value is string => Boolean(value))),
     ...report.awards.flatMap(({ title, reason }) => [title, reason]),
     ...report.dictionary.map(({ meaning }) => meaning),
     ...report.dynamics,

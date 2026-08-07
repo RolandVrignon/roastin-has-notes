@@ -4,9 +4,9 @@
 
 | Champ | Valeur |
 |---|---|
-| Version | 1.0 |
-| Dernière mise à jour | 6 août 2026 |
-| Statut | Brainstorming produit — aucun développement engagé |
+| Version | 1.1 |
+| Dernière mise à jour | 7 août 2026 |
+| Statut | Produit en développement |
 | Référence fonctionnelle | [What Brandon Thinks](https://www.whatbrandonthinks.com/) |
 | Rapport de référence | [Exemple de rapport avec paywall](https://www.whatbrandonthinks.com/fr/r/20e685b8-ee15-4ea7-8f21-47cec77a8e16) |
 
@@ -40,6 +40,8 @@ La formulation définitive dépendra du nom et de la personnalité éditoriale c
 - Aucun prix affiché pendant l'onboarding.
 - Le prix est révélé uniquement après un aperçu personnalisé du rapport.
 - Paiement unique, sans abonnement dans le MVP.
+- Les personnalités individuelles font partie du rapport Classic et de son prix.
+- Le quiz interactif est le seul supplément : achat unique de 4,99 EUR, proposé après déblocage de Classic.
 - Stripe Checkout est le prestataire de paiement du MVP.
 - Rapport complet déverrouillé sur la même URL après paiement.
 - Après paiement, l'utilisateur peut demander la livraison du roast sur son propre WhatsApp.
@@ -85,8 +87,17 @@ La formulation définitive dépendra du nom et de la personnalité éditoriale c
 #### Classic Report
 
 - Drôle, incisif et partageable.
+- Inclut le profil de personnalité conversationnelle de chaque participant, fondé uniquement sur les comportements observés dans le chat.
 - Prix cible de référence : 12,99 USD.
 - Paiement unique.
+
+#### Quiz de groupe — supplément
+
+- Quiz privé généré à partir des citations, awards et expressions déjà présents dans le rapport.
+- Aucun nouvel accès à la conversation brute et aucune nouvelle analyse IA nécessaire.
+- Accessible uniquement au propriétaire ayant déjà débloqué Classic.
+- Prix verrouillé : 4,99 EUR en paiement unique, avec équivalents locaux configurés par marché.
+- Les personnalités ne sont jamais placées derrière ce second paiement.
 
 #### Deep Report
 

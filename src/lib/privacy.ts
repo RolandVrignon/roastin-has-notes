@@ -2,7 +2,7 @@ import type { ParsedConversation } from "@/domain/report";
 
 const emailPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const phoneCandidatePattern = /(?<!\w)\+?\d[\d\s().-]{6,30}\d(?!\w)/g;
-const minorPattern = /\b(?:i\s*am|i['’]?m|aged?|j['’]?ai|tengo)\s+(?:[1-9]|1[0-7])\s*(?:years? old|ans?|años?)?\b/i;
+const minorPattern = /\b(?:(?:i\s*am|i['’]?m)\s+(?:[1-9]|1[0-7])\s+years?\s+old|(?:age|aged)\s+(?:[1-9]|1[0-7])(?:\s+years?\s+old)?|j['’]?ai\s+(?:[1-9]|1[0-7])\s+ans?|tengo\s+(?:[1-9]|1[0-7])\s+años?)\b/i;
 
 function redactText(value: string) {
   return value

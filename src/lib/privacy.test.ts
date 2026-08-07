@@ -71,6 +71,14 @@ describe("conversation privacy", () => {
 
   it("detects an explicit minor signal", () => {
     expect(hasMinorSignal(conversation("I'm 16 years old"))).toBe(true);
+    expect(hasMinorSignal(conversation("J’ai 16 ans"))).toBe(true);
+    expect(hasMinorSignal(conversation("Tengo 16 años"))).toBe(true);
     expect(hasMinorSignal(conversation("I'm 26 years old"))).toBe(false);
+  });
+
+  it("does not treat an ordinary first-person quantity as an age", () => {
+    expect(hasMinorSignal(conversation("J’ai 2 chambres disponibles"))).toBe(false);
+    expect(hasMinorSignal(conversation("I am 4 minutes away"))).toBe(false);
+    expect(hasMinorSignal(conversation("Tengo 3 entradas"))).toBe(false);
   });
 });

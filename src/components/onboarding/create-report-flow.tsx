@@ -20,7 +20,7 @@ const chatTypes: Array<{ value: ChatType; label: string; detail: string; icon: t
   { value: "other", label: "Something else", detail: "Roastin will figure it out", icon: MessageCircle },
 ];
 
-const verificationCopy = { eyebrow: "One last step", title: "Keep your report.", text: "Verify your WhatsApp number now so we can create your report and send its private link after payment.", phoneLabel: "WhatsApp number", consent: "I agree to receive the verification code and transactional report links on WhatsApp. No marketing messages.", sendCode: "Send code on WhatsApp", codeTitle: "Check WhatsApp.", codeText: "We sent a six-digit verification code to {phone}.", codeLabel: "Six-digit code", verifyAndLaunch: "Verify and create my report", differentNumber: "Use a different number" };
+const verificationCopy = { eyebrow: "One last step", title: "Keep your report.", text: "Verify your WhatsApp number now so we can create your report and send its private link.", phoneLabel: "WhatsApp number", consent: "I agree to receive the verification code and transactional report links on WhatsApp. No marketing messages.", sendCode: "Send code on WhatsApp", codeTitle: "Check WhatsApp.", codeText: "We sent a six-digit verification code to {phone}.", codeLabel: "Six-digit code", verifyAndLaunch: "Verify and create my report", differentNumber: "Use a different number" };
 
 const sampleChat = `[12/05/2026, 09:12] Maya: Are we actually booking Lisbon or just liking TikToks about it?
 [12/05/2026, 09:14] Jules: I am 100% in

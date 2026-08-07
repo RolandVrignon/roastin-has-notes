@@ -106,7 +106,7 @@ export function ReportView({ reportId }: { reportId: string }) {
 
 function ParticipantPortrait({ evidence, name, portrait }: { evidence: string[]; name: string; portrait: string }) {
   return <div className="mt-7 space-y-5">{buildPortraitBlocks(portrait, evidence).map((block, index) => block.type === "text"
-    ? <p className="display text-2xl font-semibold leading-[1.4]" key={`${name}-text-${index}`}>{block.text}</p>
+    ? <p className="text-lg font-medium leading-[1.65] text-[#223b59] md:text-xl" key={`${name}-text-${index}`}>{block.text}</p>
     : <WhatsappMessage evidence={block.evidence} key={`${name}-evidence-${index}`} />)}</div>;
 }
 

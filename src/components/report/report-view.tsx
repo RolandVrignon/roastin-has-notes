@@ -9,6 +9,7 @@ import { reportSchema, type RoastReport } from "@/domain/report";
 import { reportUi, type ReportUi } from "@/i18n/report-ui";
 import { WhatsappDeliveryCard } from "@/components/report/whatsapp-delivery-card";
 import { WhatsappMessage } from "@/components/report/whatsapp-message";
+import { buildPortraitBlocks } from "@/lib/portrait-layout";
 
 export function ReportView({ reportId }: { reportId: string }) {
   const search = useSearchParams();
@@ -94,13 +95,19 @@ export function ReportView({ reportId }: { reportId: string }) {
         <section className="mx-auto max-w-3xl px-5 py-16 md:py-24"><span className="eyebrow">{ui.opening}</span><p className="display mt-7 text-3xl font-bold leading-[1.35] tracking-[-.02em] md:text-4xl">{report.opening}</p></section>
 
         <section className="border-y border-[#112b4d]/15 bg-[#f8efd9] py-16 md:py-24">
-          <div className="mx-auto max-w-4xl px-5"><div className="flex items-end justify-between"><div><span className="eyebrow">{ui.cast}</span><h2 className="display mt-4 text-5xl font-black tracking-[-.045em] md:text-6xl">{ui.portraits}</h2></div><Users className="hidden text-[#e84b20] md:block" size={48} /></div><div className="mt-10 space-y-6">{report.participants.slice(0, unlocked ? undefined : 2).map((participant, index) => <section className="overflow-hidden rounded-3xl border-2 border-[#112b4d] bg-[#fffaf0] shadow-[6px_7px_0_#112b4d]" key={participant.name}><div className={`h-3 ${["bg-[#e84b20]", "bg-[#f6a913]", "bg-[#a9c9a9]"][index % 3]}`} /><div className="p-7 md:p-10"><div className="flex flex-wrap items-start justify-between gap-4"><div><span className="text-[10px] font-black uppercase tracking-[.15em] text-[#e84b20]">Portrait {String(index + 1).padStart(2, "0")}</span><h3 className="display mt-2 text-4xl font-black md:text-5xl">{participant.name}</h3></div><span className="rounded-full bg-[#112b4d] px-4 py-2 text-xs font-black uppercase tracking-wide text-white">{participant.title}</span></div><p className="display mt-7 text-2xl font-semibold leading-[1.4]">{participant.portrait}</p>{participant.evidence.length > 0 && <div className="mt-7 space-y-4">{participant.evidence.map((evidence, evidenceIndex) => <WhatsappMessage evidence={evidence} key={`${participant.name}-${evidenceIndex}`} />)}</div>}<p className="mt-7 border-t border-[#112b4d]/15 pt-6 font-black text-[#e84b20]">{participant.finalLine}</p></div></section>)}</div></div>
+          <div className="mx-auto max-w-4xl px-5"><div className="flex items-end justify-between"><div><span className="eyebrow">{ui.cast}</span><h2 className="display mt-4 text-5xl font-black tracking-[-.045em] md:text-6xl">{ui.portraits}</h2></div><Users className="hidden text-[#e84b20] md:block" size={48} /></div><div className="mt-10 space-y-6">{report.participants.slice(0, unlocked ? undefined : 2).map((participant, index) => <section className="overflow-hidden rounded-3xl border-2 border-[#112b4d] bg-[#fffaf0] shadow-[6px_7px_0_#112b4d]" key={participant.name}><div className={`h-3 ${["bg-[#e84b20]", "bg-[#f6a913]", "bg-[#a9c9a9]"][index % 3]}`} /><div className="p-7 md:p-10"><div className="flex flex-wrap items-start justify-between gap-4"><div><span className="text-[10px] font-black uppercase tracking-[.15em] text-[#e84b20]">Portrait {String(index + 1).padStart(2, "0")}</span><h3 className="display mt-2 text-4xl font-black md:text-5xl">{participant.name}</h3></div><span className="rounded-full bg-[#112b4d] px-4 py-2 text-xs font-black uppercase tracking-wide text-white">{participant.title}</span></div><ParticipantPortrait evidence={participant.evidence} name={participant.name} portrait={participant.portrait} /><p className="mt-7 border-t border-[#112b4d]/15 pt-6 font-black text-[#e84b20]">{participant.finalLine}</p></div></section>)}</div></div>
         </section>
 
         {!unlocked ? <Paywall error={checkoutError} loading={checkoutLoading} onCheckout={checkout} price={offer?.formattedPrice ?? "$12.99"} ui={ui} /> : <><FullReport report={report} ui={ui} /><WhatsappDeliveryCard locale={report.locale} reportId={reportId} /></>}
       </article>
     </main>
   );
+}
+
+function ParticipantPortrait({ evidence, name, portrait }: { evidence: string[]; name: string; portrait: string }) {
+  return <div className="mt-7 space-y-5">{buildPortraitBlocks(portrait, evidence).map((block, index) => block.type === "text"
+    ? <p className="display text-2xl font-semibold leading-[1.4]" key={`${name}-text-${index}`}>{block.text}</p>
+    : <WhatsappMessage evidence={block.evidence} key={`${name}-evidence-${index}`} />)}</div>;
 }
 
 function Paywall({ error, loading, onCheckout, price, ui }: { error: string; loading: boolean; onCheckout: () => void; price: string; ui: ReportUi }) {

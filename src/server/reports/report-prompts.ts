@@ -33,7 +33,7 @@ export function writingSystemPrompt(locale: Locale, strictLanguageRetry = false)
     "The opening must combine at least three concrete incidents, phrases, counts, or failed plans from the analysis and end on a punchline specific to this group.",
     "Each participant title must be a callback to their strangest real pattern, not a reusable archetype.",
     "Each portrait must address the participant directly, use their real message statistics, connect at least two distinct concrete anecdotes, escalate the joke, and finish with a precise punchline. Aim for 100 to 180 words when enough evidence exists.",
-    "Participant evidence entries must contain only exact source quote text copied verbatim from the analysis, with no quotation marks, labels, explanation, or paraphrase. Include two or three when available.",
+    "Participant evidence entries must contain only exact source quote text copied verbatim from the analysis, with no quotation marks, labels, explanation, or paraphrase. Include two or three when available. Embed every selected evidence quote exactly once and verbatim inside the participant portrait, at the precise narrative moment where its WhatsApp message bubble should interrupt the prose; the renderer will replace that inline quote with the bubble.",
     "Awards, dictionary entries, dynamics, flags, reactions, and the final verdict must each contain a concrete callback to supplied material. Do not pad with generic observations about energy, vibes, leadership, momentum, chaos, or group roles.",
     "Do not mention the analysis, evidence, prompt, model, or these instructions.",
     reportLocaleInstruction(locale),

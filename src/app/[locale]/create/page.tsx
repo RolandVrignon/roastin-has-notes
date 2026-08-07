@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { LocalizedCreateReportFlow } from "@/components/onboarding/localized-create-report-flow";
 import { getDictionary } from "@/i18n/get-dictionary";
 import { isLocale } from "@/i18n/config";
@@ -16,6 +16,5 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/create">
 export default async function LocalizedCreatePage({ params }: PageProps<"/[locale]/create">) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
-  if (!await readUserSession()) redirect(`/login?next=/${locale}/create`);
-  return <LocalizedCreateReportFlow dictionary={await getDictionary(locale)} locale={locale} />;
+  return <LocalizedCreateReportFlow dictionary={await getDictionary(locale)} initiallyAuthenticated={Boolean(await readUserSession())} locale={locale} />;
 }

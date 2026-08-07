@@ -79,6 +79,7 @@ export type Dictionary = {
       sample: string;
     };
     review: { eyebrow: string; title: string; text: string; chatName: string; participantName: string; invalidNames: string };
+    verification: { eyebrow: string; title: string; text: string; phoneLabel: string; consent: string; sendCode: string; codeTitle: string; codeText: string; codeLabel: string; verifyAndLaunch: string; differentNumber: string; sessionExpired: string };
     launch: {
       ready: string;
       messages: string;

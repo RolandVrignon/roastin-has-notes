@@ -64,6 +64,7 @@ const dictionary = {
       replace: "Choose a different file", privacy: "Original chat discarded after generation", sample: "Try the sample chat instead",
     },
     review: { eyebrow: "Cast of characters", title: "Make sure we got the room right.", text: "Use first names or nicknames. These are the names that will appear in your report.", chatName: "Chat name", participantName: "Display name", invalidNames: "Each participant needs a unique first name or nickname." },
+    verification: { eyebrow: "One last step", title: "Keep your report.", text: "Verify your WhatsApp number now so we can create your report and send its private link after payment.", phoneLabel: "WhatsApp number", consent: "I agree to receive the verification code and transactional report links on WhatsApp. No marketing messages.", sendCode: "Send code on WhatsApp", codeTitle: "Check WhatsApp.", codeText: "We sent a six-digit verification code to {phone}.", codeLabel: "Six-digit code", verifyAndLaunch: "Verify and create my report", differentNumber: "Use a different number", sessionExpired: "Your session expired. Verify your WhatsApp number to continue." },
     launch: {
       ready: "Roastin is ready for", messages: "messages", protagonists: "protagonists", warning: "Absolutely no idea what they are about to learn.",
       cards: ["Patterns", "Portraits", "Verdict"],

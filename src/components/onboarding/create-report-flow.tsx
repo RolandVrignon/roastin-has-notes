@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { strFromU8, unzipSync } from "fflate";
 import { ArrowLeft, ArrowRight, BriefcaseBusiness, Check, FileArchive, Heart, LoaderCircle, LockKeyhole, MessageCircle, Smile, Sparkles, Upload, Users, X } from "lucide-react";
+import { InlineWhatsappAuth } from "@/components/account/inline-whatsapp-auth";
 import { Logo } from "@/components/brand/logo";
 import { parseWhatsApp } from "@/lib/whatsapp";
 
@@ -18,6 +19,8 @@ const chatTypes: Array<{ value: ChatType; label: string; detail: string; icon: t
   { value: "work", label: "Work or team", detail: "Professionally unprofessional", icon: BriefcaseBusiness },
   { value: "other", label: "Something else", detail: "Roastin will figure it out", icon: MessageCircle },
 ];
+
+const verificationCopy = { eyebrow: "One last step", title: "Keep your report.", text: "Verify your WhatsApp number now so we can create your report and send its private link after payment.", phoneLabel: "WhatsApp number", consent: "I agree to receive the verification code and transactional report links on WhatsApp. No marketing messages.", sendCode: "Send code on WhatsApp", codeTitle: "Check WhatsApp.", codeText: "We sent a six-digit verification code to {phone}.", codeLabel: "Six-digit code", verifyAndLaunch: "Verify and create my report", differentNumber: "Use a different number" };
 
 const sampleChat = `[12/05/2026, 09:12] Maya: Are we actually booking Lisbon or just liking TikToks about it?
 [12/05/2026, 09:14] Jules: I am 100% in
@@ -35,7 +38,7 @@ const sampleChat = `[12/05/2026, 09:12] Maya: Are we actually booking Lisbon or 
 [17/05/2026, 10:07] Theo: Wait Lisbon is actually happening?
 [17/05/2026, 10:08] Maya: I need a new group chat.`;
 
-export function CreateReportFlow() {
+export function CreateReportFlow({ initiallyAuthenticated }: { initiallyAuthenticated: boolean }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(1);
@@ -47,6 +50,7 @@ export function CreateReportFlow() {
   const [participantNames, setParticipantNames] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [authenticated, setAuthenticated] = useState(initiallyAuthenticated);
   const [confirmedAdult, setConfirmedAdult] = useState(false);
   const parsed = useMemo(() => rawText ? parseWhatsApp(rawText) : null, [rawText]);
   const totalSteps = 5;
@@ -107,6 +111,7 @@ export function CreateReportFlow() {
         body: JSON.stringify({ chatName, chatType, context, locale: "en", participantAliases, rawText }),
       });
       const payload = await response.json() as { reportId?: string; error?: string };
+      if (response.status === 401) { setAuthenticated(false); setError("Your session expired. Verify your WhatsApp number to continue."); setLoading(false); return; }
       if (!response.ok || !payload.reportId) throw new Error(payload.error ?? "Report generation failed");
       setRawText("");
       router.push(`/r/${payload.reportId}`);
@@ -117,7 +122,7 @@ export function CreateReportFlow() {
   }
 
   function canContinue() {
-    if (step === 3) return Boolean(rawText && parsed && parsed.messages.length >= 8);
+    if (step === 1) return Boolean(rawText && parsed && parsed.messages.length >= 8);
     if (step === 4) {
       const names = parsed?.participants.map(({ name }) => (participantNames[name] ?? name).trim()) ?? [];
       return chatName.trim().length > 0 && names.every((name) => name.length > 0 && name.length <= 40)
@@ -142,21 +147,21 @@ export function CreateReportFlow() {
         </div>
 
         <section className="mt-10 min-h-[510px]">
-          {step === 1 && <ChatTypeStep value={chatType} onChange={setChatType} />}
-          {step === 2 && <ContextStep value={context} onChange={setContext} />}
-          {step === 3 && <UploadStep error={error} fileName={fileName} inputRef={fileRef} onFile={readFile} onSample={useSample} parsed={parsed} />}
+          {step === 1 && <UploadStep error={error} fileName={fileName} inputRef={fileRef} onFile={readFile} onSample={useSample} parsed={parsed} />}
+          {step === 2 && <ChatTypeStep value={chatType} onChange={setChatType} />}
+          {step === 3 && <ContextStep value={context} onChange={setContext} />}
           {step === 4 && <ReviewStep chatName={chatName} onChatName={setChatName} onParticipantName={(sourceName, displayName) => setParticipantNames((current) => ({ ...current, [sourceName]: displayName }))} parsed={parsed} participantNames={participantNames} />}
-          {step === 5 && <LaunchStep chatName={chatName} confirmedAdult={confirmedAdult} loading={loading} onConfirmedAdult={setConfirmedAdult} parsed={parsed} />}
+          {step === 5 && <><LaunchStep chatName={chatName} confirmedAdult={confirmedAdult} loading={loading} onConfirmedAdult={setConfirmedAdult} parsed={parsed} />{!authenticated && <InlineWhatsappAuth copy={verificationCopy} launchReady={confirmedAdult} onVerified={async () => { setAuthenticated(true); await generate(); }} />}</>}
         </section>
 
-        {error && step !== 3 && <p className="mb-4 rounded-xl bg-red-50 p-4 text-sm font-bold text-red-800">{error}</p>}
+        {error && step !== 1 && <p className="mb-4 rounded-xl bg-red-50 p-4 text-sm font-bold text-red-800">{error}</p>}
         <div className="flex items-center justify-between border-t border-[#112b4d]/15 pt-6">
           <button className="btn btn-ghost" disabled={step === 1 || loading} onClick={() => setStep((current) => current - 1)} type="button"><ArrowLeft size={18} /> Back</button>
           {step < totalSteps ? (
             <button className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-40" disabled={!canContinue()} onClick={() => setStep((current) => current + 1)} type="button">Continue <ArrowRight size={18} /></button>
-          ) : (
+          ) : authenticated ? (
             <button className="btn btn-primary min-w-48 disabled:cursor-not-allowed disabled:opacity-40" disabled={loading || !confirmedAdult} onClick={generate} type="button">{loading ? <><LoaderCircle className="animate-spin" size={19} /> Writing the report</> : <>Let Roastin cook <Sparkles size={18} /></>}</button>
-          )}
+          ) : <span />}
         </div>
       </div>
     </main>

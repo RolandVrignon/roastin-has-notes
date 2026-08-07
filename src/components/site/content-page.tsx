@@ -6,6 +6,7 @@ import type { ContentPage as ContentPageData, Dictionary } from "@/i18n/types";
 
 export function ContentPage({ locale, dictionary, page, pathname }: { locale: Locale; dictionary: Dictionary; page: ContentPageData; pathname: string }) {
   const isLaunchWarning = page.sections.some((section) => section.title.toLowerCase().includes("launch") || section.title.toLowerCase().includes("lancement"));
+  const supportNumber = process.env.NEXT_PUBLIC_WHATSAPP_SUPPORT_NUMBER?.replace(/\D/g, "");
   return (
     <main id="content" lang={locale}>
       <LocalizedHeader dictionary={dictionary} locale={locale} pathname={pathname} />
@@ -14,6 +15,7 @@ export function ContentPage({ locale, dictionary, page, pathname }: { locale: Lo
           <span className="eyebrow">{page.eyebrow}</span>
           <h1 className="display mt-5 text-5xl font-black leading-[.95] tracking-[-.045em] md:text-7xl">{page.title}</h1>
           <p className="mt-7 text-lg leading-8 text-[#3b4d5f]">{page.intro}</p>
+          {pathname === "/contact" && supportNumber && <a className="btn mt-7 border-[#112b4d] bg-[#25d366] text-[#112b4d] shadow-[4px_5px_0_#112b4d]" href={`https://wa.me/${supportNumber}`} rel="noreferrer" target="_blank">Open WhatsApp</a>}
           {isLaunchWarning && <div className="mt-7 flex gap-3 rounded-2xl border border-[#f6a913] bg-[#f6a913]/15 p-4 text-sm leading-6"><AlertTriangle aria-hidden="true" className="shrink-0" size={20} /><span>Beta · last reviewed 6 August 2026</span></div>}
         </header>
         <div className="space-y-5">

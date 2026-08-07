@@ -6,11 +6,15 @@ const mocks = vi.hoisted(() => ({
   getPrisma: vi.fn(),
   hashOtp: vi.fn(() => "hashed-code"),
   readOwnerHash: vi.fn(),
-  sendOtpEmail: vi.fn(async () => ({})),
+  sendOtpWhatsapp: vi.fn(async () => ({})),
 }));
 
+vi.mock("@/lib/data-encryption", () => ({
+  blindIndex: vi.fn(() => "phone-hash"),
+  encryptSensitive: vi.fn(() => ({ ciphertext: "ciphertext", iv: "iv", tag: "tag" })),
+}));
 vi.mock("@/lib/db", () => ({ getPrisma: mocks.getPrisma }));
-vi.mock("@/lib/otp", () => ({ createOtp: mocks.createOtp, hashOtp: mocks.hashOtp, sendOtpEmail: mocks.sendOtpEmail }));
+vi.mock("@/lib/otp", () => ({ createOtp: mocks.createOtp, hashOtp: mocks.hashOtp, sendOtpWhatsapp: mocks.sendOtpWhatsapp }));
 vi.mock("@/lib/owner-session", () => ({ readOwnerHash: mocks.readOwnerHash }));
 vi.mock("@/lib/user-session", () => ({ createUserSession: mocks.createUserSession }));
 
@@ -49,16 +53,17 @@ describe("OTP route boundaries", () => {
     };
     mocks.getPrisma.mockReturnValue(db);
 
-    const response = await requestCode(jsonRequest("/api/auth/request-code", { email: "MAYA@EXAMPLE.COM" }));
+    const response = await requestCode(jsonRequest("/api/auth/request-code", { phone: "+33 6 12 34 56 78", consent: true }));
 
     expect(response.status).toBe(200);
     expect(db.otpCode.count).toHaveBeenCalledWith({
-      where: { email: "maya@example.com", createdAt: { gt: new Date("2026-08-06T11:50:00.000Z") } },
+      where: { phoneHash: "phone-hash", createdAt: { gt: new Date("2026-08-06T11:50:00.000Z") } },
     });
     expect(db.otpCode.create).toHaveBeenCalledWith({
-      data: { email: "maya@example.com", codeHash: "hashed-code", expiresAt: new Date("2026-08-06T12:10:00.000Z") },
+      data: { phoneHash: "phone-hash", codeHash: "hashed-code", expiresAt: new Date("2026-08-06T12:10:00.000Z") },
     });
-    expect(mocks.sendOtpEmail).toHaveBeenCalledWith("maya@example.com", "012345");
+    expect(mocks.hashOtp).toHaveBeenCalledWith("phone-hash", "012345");
+    expect(mocks.sendOtpWhatsapp).toHaveBeenCalledWith("+33612345678", "012345");
   });
 
   it("rate-limits the fourth request without generating or storing another code", async () => {
@@ -71,12 +76,12 @@ describe("OTP route boundaries", () => {
     };
     mocks.getPrisma.mockReturnValue(db);
 
-    const response = await requestCode(jsonRequest("/api/auth/request-code", { email: "maya@example.com" }));
+    const response = await requestCode(jsonRequest("/api/auth/request-code", { phone: "+33612345678", consent: true }));
 
     expect(response.status).toBe(429);
     expect(mocks.createOtp).not.toHaveBeenCalled();
     expect(db.otpCode.create).not.toHaveBeenCalled();
-    expect(mocks.sendOtpEmail).not.toHaveBeenCalled();
+    expect(mocks.sendOtpWhatsapp).not.toHaveBeenCalled();
   });
 
   it("treats a code expiring exactly now as expired", async () => {
@@ -86,12 +91,12 @@ describe("OTP route boundaries", () => {
     };
     mocks.getPrisma.mockReturnValue(db);
 
-    const response = await verifyCode(jsonRequest("/api/auth/verify-code", { email: "MAYA@EXAMPLE.COM", code: "012345" }));
+    const response = await verifyCode(jsonRequest("/api/auth/verify-code", { phone: "+33612345678", code: "012345", consent: true }));
 
     expect(response.status).toBe(401);
     expect(db.otpCode.findFirst).toHaveBeenCalledWith({
       where: {
-        email: "maya@example.com",
+        phoneHash: "phone-hash",
         usedAt: null,
         lockedAt: null,
         expiresAt: { gt: now },
@@ -113,12 +118,51 @@ describe("OTP route boundaries", () => {
     };
     mocks.getPrisma.mockReturnValue(db);
 
-    const response = await verifyCode(jsonRequest("/api/auth/verify-code", { email: "maya@example.com", code: "012345" }));
+    const response = await verifyCode(jsonRequest("/api/auth/verify-code", { phone: "+33612345678", code: "012345", consent: true }));
 
     expect(response.status).toBe(401);
     expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: { attempts: { increment: 1 }, lockedAt: now },
     }));
     expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("creates a phone-only user and attaches browser-owned reports after verification", async () => {
+    const tx = {
+      otpCode: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      user: { upsert: vi.fn(async () => ({ id: "user-123" })) },
+      report: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    };
+    const db = {
+      otpCode: { findFirst: vi.fn(async () => ({ id: "otp-123", codeHash: "hashed-code", attempts: 0 })) },
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    };
+    mocks.getPrisma.mockReturnValue(db);
+    mocks.readOwnerHash.mockResolvedValue("owner-hash");
+    mocks.createUserSession.mockResolvedValue({ name: "roastin_session", value: "session-token", path: "/", httpOnly: true });
+
+    const response = await verifyCode(jsonRequest("/api/auth/verify-code", { phone: "+33612345678", code: "012345", consent: true }));
+
+    expect(response.status).toBe(200);
+    expect(tx.user.upsert).toHaveBeenCalledWith({
+      where: { phoneHash: "phone-hash" },
+      create: {
+        phoneHash: "phone-hash",
+        phoneCiphertext: "ciphertext",
+        phoneIv: "iv",
+        phoneTag: "tag",
+        whatsappConsentVersion: "whatsapp-account-v1",
+        whatsappConsentAt: now,
+      },
+      update: {
+        phoneCiphertext: "ciphertext",
+        phoneIv: "iv",
+        phoneTag: "tag",
+        whatsappConsentVersion: "whatsapp-account-v1",
+        whatsappConsentAt: now,
+      },
+    });
+    expect(tx.report.updateMany).toHaveBeenCalledWith({ where: { ownerTokenHash: "owner-hash", userId: null }, data: { userId: "user-123" } });
+    expect(mocks.createUserSession).toHaveBeenCalledWith("user-123");
   });
 });

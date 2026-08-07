@@ -3,6 +3,8 @@
 Turn a WhatsApp conversation into the unfiltered report nobody in the chat would dare to write.
 
 The living product specification is in [Brief.md](./Brief.md).
+The launch economics and acquisition plan are in [BUSINESS_PLAN.md](./BUSINESS_PLAN.md).
+The Meta provisioning checklist is in [docs/whatsapp-setup.md](./docs/whatsapp-setup.md).
 
 ## What is implemented
 
@@ -11,15 +13,16 @@ The living product specification is in [Brief.md](./Brief.md).
 - International date-format handling, local chat summary and deterministic PII redaction.
 - Durable Temporal generation with encrypted ephemeral payloads, idempotent artifacts, retry-safe activities and a localized deterministic fallback.
 - Server-side preview/full-report separation backed by PostgreSQL and Prisma.
-- Stripe Checkout Sessions, localized offer selection, idempotent webhooks, email recovery and report entitlements.
+- Stripe Checkout Sessions, localized offer selection, idempotent webhooks and report entitlements.
 - Revocable seven-day sharing links with optional name anonymization and quote hiding.
-- Optional WhatsApp Cloud API delivery with encrypted phone storage and signed webhooks.
-- Attempt-limited email OTP sign-in, recovery, purchase history, export and self-service deletion.
+- Phone-only identity with attempt-limited WhatsApp OTP, encrypted phone storage and signed Meta webhooks.
+- Automatic WhatsApp delivery of the private seven-day report link after payment.
+- WhatsApp-based recovery, purchase history, export and self-service deletion.
 - Localized public, legal, support and synthetic example pages with international SEO metadata.
 - Hourly Temporal retention cleanup for expired payloads, sessions, OTPs, links and WhatsApp destinations.
 - Docker Compose deployment with Caddy, separate PostgreSQL databases, Temporal Server/UI and a dedicated worker.
 
-The application is fully runnable in local demo mode. Real OpenRouter, Stripe, Resend, WhatsApp credentials and final legal entity details are required before a public commercial launch.
+The application is fully runnable in local demo mode. Real OpenRouter, Stripe, WhatsApp Business Platform credentials, approved message templates and final legal entity details are required before a public commercial launch.
 
 ## Local development
 

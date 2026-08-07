@@ -7,6 +7,8 @@ type ReportUi = {
   oneTime: string; privateDefault: string; unlock: string; awardsKicker: string; awardsTitle: string;
   dictionaryKicker: string; dictionaryTitle: string; dynamicsKicker: string; dynamicsTitle: string;
   flagsKicker: string; flagsTitle: string; finalKicker: string; shareGroup: string;
+  personalitiesKicker: string; personalitiesTitle: string; personalityStrength: string; personalityChaos: string;
+  quizKicker: string; quizTitle: string; quizLockedBody: string; quizUnlock: string; quizStart: string; quizNext: string; quizFinish: string; quizRestart: string; quizScore: string; quizCorrect: string; quizWrong: string;
 };
 
 const en: ReportUi = {
@@ -14,6 +16,21 @@ const en: ReportUi = {
   privateReport: "Private report", share: "Share", copied: "Link copied", classic: "The Classic Report", messages: "messages", protagonists: "protagonists", calledOut: "called out", opening: "Roastin’s opening notes", cast: "The cast", portraits: "Participant portraits",
   paywallTitle: "You’ve only seen the opening act.", paywallBody: "Unlock every portrait, the awards, your private dictionary, hidden dynamics, flags, predicted reactions and Roastin’s final verdict.", features: ["Every full portrait", "Group awards", "Private dictionary", "Hidden dynamics", "Red, yellow & green flags", "The final verdict"], oneTime: "one time", privateDefault: "No subscription. Private by default.", unlock: "Unlock the full report",
   awardsKicker: "Official recognition", awardsTitle: "The awards nobody applied for", dictionaryKicker: "Translation required", dictionaryTitle: "The private dictionary", dynamicsKicker: "The social physics", dynamicsTitle: "Hidden dynamics", flagsKicker: "Traffic lights", flagsTitle: "The flags", finalKicker: "Roastin’s final verdict", shareGroup: "Share with the group",
+  personalitiesKicker: "Included in Classic", personalitiesTitle: "Everyone’s chat personality", personalityStrength: "Superpower", personalityChaos: "Chaos trigger",
+  quizKicker: "Optional add-on", quizTitle: "Who really read the chat?", quizLockedBody: "Turn the report into a private group quiz. Personalities are already included in Classic; only this interactive quiz costs extra.", quizUnlock: "Unlock the quiz", quizStart: "Start the quiz", quizNext: "Next question", quizFinish: "See the score", quizRestart: "Play again", quizScore: "Your score", quizCorrect: "Correct", quizWrong: "Not quite",
+};
+
+type FeatureCopy = Pick<ReportUi, "personalitiesKicker" | "personalitiesTitle" | "personalityStrength" | "personalityChaos" | "quizKicker" | "quizTitle" | "quizLockedBody" | "quizUnlock" | "quizStart" | "quizNext" | "quizFinish" | "quizRestart" | "quizScore" | "quizCorrect" | "quizWrong">;
+
+const featureCopies: Record<Locale, FeatureCopy> = {
+  en,
+  fr: { personalitiesKicker: "Inclus dans Classic", personalitiesTitle: "La personnalité de chacun dans le chat", personalityStrength: "Super-pouvoir", personalityChaos: "Déclencheur de chaos", quizKicker: "Supplément optionnel", quizTitle: "Qui a vraiment lu la conversation ?", quizLockedBody: "Transforme le rapport en quiz privé pour le groupe. Les personnalités sont déjà incluses dans Classic ; seul ce quiz interactif est en supplément.", quizUnlock: "Débloquer le quiz", quizStart: "Lancer le quiz", quizNext: "Question suivante", quizFinish: "Voir le score", quizRestart: "Rejouer", quizScore: "Ton score", quizCorrect: "Bonne réponse", quizWrong: "Pas tout à fait" },
+  es: { personalitiesKicker: "Incluido en Classic", personalitiesTitle: "La personalidad de cada uno en el chat", personalityStrength: "Superpoder", personalityChaos: "Detonante del caos", quizKicker: "Extra opcional", quizTitle: "¿Quién leyó de verdad el chat?", quizLockedBody: "Convierte el informe en un quiz privado para el grupo. Las personalidades ya están incluidas en Classic; solo este quiz interactivo cuesta aparte.", quizUnlock: "Desbloquear el quiz", quizStart: "Empezar el quiz", quizNext: "Siguiente pregunta", quizFinish: "Ver puntuación", quizRestart: "Jugar otra vez", quizScore: "Tu puntuación", quizCorrect: "Correcto", quizWrong: "No exactamente" },
+  it: { personalitiesKicker: "Incluso in Classic", personalitiesTitle: "La personalità di ciascuno nella chat", personalityStrength: "Superpotere", personalityChaos: "Innesco del caos", quizKicker: "Extra opzionale", quizTitle: "Chi ha letto davvero la chat?", quizLockedBody: "Trasforma il report in un quiz privato per il gruppo. Le personalità sono già incluse in Classic; solo questo quiz interattivo costa a parte.", quizUnlock: "Sblocca il quiz", quizStart: "Inizia il quiz", quizNext: "Domanda successiva", quizFinish: "Vedi il punteggio", quizRestart: "Gioca ancora", quizScore: "Il tuo punteggio", quizCorrect: "Corretto", quizWrong: "Non proprio" },
+  de: { personalitiesKicker: "In Classic enthalten", personalitiesTitle: "Die Chat-Persönlichkeit aller", personalityStrength: "Superkraft", personalityChaos: "Chaos-Auslöser", quizKicker: "Optionales Extra", quizTitle: "Wer hat den Chat wirklich gelesen?", quizLockedBody: "Mach aus dem Bericht ein privates Gruppenquiz. Die Persönlichkeiten sind bereits in Classic enthalten; nur dieses interaktive Quiz kostet extra.", quizUnlock: "Quiz freischalten", quizStart: "Quiz starten", quizNext: "Nächste Frage", quizFinish: "Ergebnis ansehen", quizRestart: "Noch einmal", quizScore: "Dein Ergebnis", quizCorrect: "Richtig", quizWrong: "Nicht ganz" },
+  "pt-br": { personalitiesKicker: "Incluído no Classic", personalitiesTitle: "A personalidade de cada um no chat", personalityStrength: "Superpoder", personalityChaos: "Gatilho do caos", quizKicker: "Extra opcional", quizTitle: "Quem realmente leu a conversa?", quizLockedBody: "Transforme o relatório em um quiz privado para o grupo. As personalidades já estão incluídas no Classic; só este quiz interativo custa à parte.", quizUnlock: "Desbloquear o quiz", quizStart: "Começar o quiz", quizNext: "Próxima pergunta", quizFinish: "Ver pontuação", quizRestart: "Jogar novamente", quizScore: "Sua pontuação", quizCorrect: "Correto", quizWrong: "Quase" },
+  pt: { personalitiesKicker: "Incluído no Classic", personalitiesTitle: "A personalidade de cada um na conversa", personalityStrength: "Superpoder", personalityChaos: "Gatilho do caos", quizKicker: "Extra opcional", quizTitle: "Quem leu mesmo a conversa?", quizLockedBody: "Transforma o relatório num quiz privado para o grupo. As personalidades já estão incluídas no Classic; só este quiz interativo custa à parte.", quizUnlock: "Desbloquear o quiz", quizStart: "Começar o quiz", quizNext: "Próxima pergunta", quizFinish: "Ver pontuação", quizRestart: "Jogar novamente", quizScore: "A tua pontuação", quizCorrect: "Certo", quizWrong: "Não exatamente" },
+  nl: { personalitiesKicker: "Inbegrepen in Classic", personalitiesTitle: "Ieders chatpersoonlijkheid", personalityStrength: "Superkracht", personalityChaos: "Chaos-trigger", quizKicker: "Optionele extra", quizTitle: "Wie heeft de chat echt gelezen?", quizLockedBody: "Maak van het rapport een privéquiz voor de groep. Persoonlijkheden zitten al in Classic; alleen deze interactieve quiz kost extra.", quizUnlock: "Quiz ontgrendelen", quizStart: "Quiz starten", quizNext: "Volgende vraag", quizFinish: "Score bekijken", quizRestart: "Opnieuw spelen", quizScore: "Jouw score", quizCorrect: "Goed", quizWrong: "Niet helemaal" },
 };
 
 const copies: Record<Locale, ReportUi> = {
@@ -28,7 +45,8 @@ const copies: Record<Locale, ReportUi> = {
 };
 
 export function reportUi(locale: string | null | undefined) {
-  return copies[locale && isLocale(locale) ? locale : "en"];
+  const selected = locale && isLocale(locale) ? locale : "en";
+  return { ...copies[selected], ...featureCopies[selected] };
 }
 
 export type { ReportUi };

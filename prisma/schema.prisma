@@ -52,12 +52,17 @@ enum DeliveryStatus {
 }
 
 model User {
-  id        String    @id @default(uuid()) @db.Uuid
-  email     String    @unique
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  reports   Report[]
-  sessions  Session[]
+  id                     String    @id @default(uuid()) @db.Uuid
+  phoneCiphertext        String    @map("phone_ciphertext")
+  phoneIv                String    @map("phone_iv")
+  phoneTag               String    @map("phone_tag")
+  phoneHash              String    @unique @map("phone_hash")
+  whatsappConsentVersion String    @map("whatsapp_consent_version")
+  whatsappConsentAt      DateTime  @map("whatsapp_consent_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+  reports                Report[]
+  sessions               Session[]
 
   @@map("users")
 }
@@ -93,6 +98,11 @@ model Report {
   participantCount    Int                   @default(0) @map("participant_count")
   dateRange           String?               @map("date_range")
   model               String?
+  generationCostUsd   Decimal?              @map("generation_cost_usd") @db.Decimal(18, 10)
+  generationCostEur   Decimal?              @map("generation_cost_eur") @db.Decimal(18, 10)
+  usdToEurRate        Decimal?              @map("usd_to_eur_rate") @db.Decimal(18, 10)
+  exchangeRateDate    DateTime?             @map("exchange_rate_date") @db.Date
+  exchangeRateSource  String?               @map("exchange_rate_source")
   promptVersion       String                @default("classic-v1") @map("prompt_version")
   paidAt              DateTime?             @map("paid_at")
   rawDeletedAt        DateTime?             @map("raw_deleted_at")
@@ -102,7 +112,7 @@ model Report {
   user                User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   payments            Payment[]
   shareLinks          ShareLink[]
-  entitlement         Entitlement?
+  entitlements        Entitlement[]
   deliveries          WhatsappDelivery[]
   generationArtifacts GenerationArtifact[]
 
@@ -122,6 +132,7 @@ model GenerationArtifact {
   model          String?
   inputTokens    Int?                   @map("input_tokens")
   outputTokens   Int?                   @map("output_tokens")
+  costUsd        Decimal                @default(0) @map("cost_usd") @db.Decimal(18, 10)
   createdAt      DateTime               @default(now()) @map("created_at")
   report         Report                 @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
@@ -149,13 +160,14 @@ model Payment {
 
 model Entitlement {
   id              String   @id @default(uuid()) @db.Uuid
-  reportId        String   @unique @map("report_id") @db.Uuid
+  reportId        String   @map("report_id") @db.Uuid
   sourcePaymentId String   @unique @map("source_payment_id") @db.Uuid
   offerCode       String   @map("offer_code")
   createdAt       DateTime @default(now()) @map("created_at")
   report          Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
   sourcePayment   Payment  @relation(fields: [sourcePaymentId], references: [id], onDelete: Restrict)
 
+  @@unique([reportId, offerCode])
   @@map("entitlements")
 }
 
@@ -219,7 +231,7 @@ model WhatsappDelivery {
 
 model OtpCode {
   id        String    @id @default(uuid()) @db.Uuid
-  email     String
+  phoneHash String    @map("phone_hash")
   codeHash  String    @map("code_hash")
   attempts  Int       @default(0)
   lockedAt  DateTime? @map("locked_at")
@@ -227,6 +239,6 @@ model OtpCode {
   usedAt    DateTime? @map("used_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
-  @@index([email, expiresAt])
+  @@index([phoneHash, expiresAt])
   @@map("otp_codes")
 }

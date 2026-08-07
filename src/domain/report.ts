@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+export const personalitySchema = z.object({
+  archetype: z.string(),
+  summary: z.string(),
+  traits: z.array(z.string()).min(2).max(4),
+  strength: z.string(),
+  chaosTrigger: z.string(),
+});
+
 export const participantSchema = z.object({
   name: z.string(),
   messageCount: z.number().int().nonnegative(),
@@ -8,6 +16,7 @@ export const participantSchema = z.object({
   portrait: z.string(),
   evidence: z.array(z.string()).max(3),
   finalLine: z.string(),
+  personality: personalitySchema.optional(),
 });
 
 export const reportSchema = z.object({
@@ -33,6 +42,9 @@ export const reportSchema = z.object({
 });
 
 export const reportContentSchema = reportSchema.omit({ id: true, chatName: true, locale: true, createdAt: true, stats: true });
+export const generatedReportContentSchema = reportContentSchema.extend({
+  participants: z.array(participantSchema.extend({ personality: personalitySchema })),
+});
 
 export type RoastReport = z.infer<typeof reportSchema>;
 

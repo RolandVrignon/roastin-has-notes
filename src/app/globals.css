@@ -79,7 +79,7 @@ button { cursor: pointer; }
 .btn:active { transform: translateY(0); }
 .btn-primary { background: var(--orange); box-shadow: 4px 5px 0 var(--ink); color: white; }
 .btn-primary:hover { background: #f25b2f; box-shadow: 2px 3px 0 var(--ink); }
-.btn-cream { background: var(--paper-light); box-shadow: 4px 5px 0 var(--ink); }
+.btn-cream { background: var(--paper-light); box-shadow: 4px 5px 0 var(--ink); color: var(--ink); }
 .btn-ghost { border-color: transparent; min-height: 44px; padding-inline: 16px; }
 .btn-ghost:hover { background: rgba(17, 43, 77, .07); }
 

@@ -18,5 +18,5 @@ export type GenerationWorkflowStatus = {
 };
 
 export type LockedGeneration = { revision: number; alreadyReady: boolean };
-export type ArtifactReference = { artifactId: string; inputTokens?: number; outputTokens?: number; model?: string };
+export type ArtifactReference = { artifactId: string; inputTokens?: number; outputTokens?: number; costUsd?: number; model?: string };
 export type ValidatedArtifact = { artifactId: string; evidenceCount: number };

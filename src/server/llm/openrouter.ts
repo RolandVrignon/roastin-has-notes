@@ -1,12 +1,13 @@
 import { z } from "zod";
 
-type OpenRouterUsage = { prompt_tokens?: number; completion_tokens?: number };
+type OpenRouterUsage = { prompt_tokens?: number; completion_tokens?: number; cost?: number };
 
 export type StructuredCompletion<T> = {
   value: T;
   model: string;
   inputTokens?: number;
   outputTokens?: number;
+  costUsd: number;
 };
 
 class OpenRouterError extends Error {
@@ -29,7 +30,6 @@ async function complete(messages: Array<{ role: "system" | "user" | "assistant";
     },
     body: JSON.stringify({
       model,
-      temperature: 0.8,
       messages,
       response_format: { type: "json_schema", json_schema: { name: schemaName, strict: true, schema: z.toJSONSchema(schema) } },
       provider: { data_collection: "deny", require_parameters: true },
@@ -37,10 +37,13 @@ async function complete(messages: Array<{ role: "system" | "user" | "assistant";
     signal: AbortSignal.timeout(180_000),
   });
   if (!response.ok) throw new OpenRouterError(response.status, response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500);
-  const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: OpenRouterUsage };
+  const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }>; model?: string; usage?: OpenRouterUsage };
   const content = payload.choices?.[0]?.message?.content;
   if (!content) throw new Error("OPENROUTER_EMPTY_RESPONSE");
-  return { content, model, usage: payload.usage };
+  if (!payload.model) throw new Error("OPENROUTER_MODEL_MISSING");
+  const cost = payload.usage?.cost;
+  if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) throw new Error("OPENROUTER_COST_MISSING");
+  return { content, model: payload.model, usage: { ...payload.usage, cost } };
 }
 
 export async function requestStructuredCompletion<T>(options: {
@@ -61,6 +64,7 @@ export async function requestStructuredCompletion<T>(options: {
       model: first.model,
       inputTokens: first.usage?.prompt_tokens,
       outputTokens: first.usage?.completion_tokens,
+      costUsd: first.usage.cost,
     };
   } catch {
     const repaired = await complete([
@@ -74,6 +78,7 @@ export async function requestStructuredCompletion<T>(options: {
       model: repaired.model,
       inputTokens: (first.usage?.prompt_tokens ?? 0) + (repaired.usage?.prompt_tokens ?? 0),
       outputTokens: (first.usage?.completion_tokens ?? 0) + (repaired.usage?.completion_tokens ?? 0),
+      costUsd: first.usage.cost + repaired.usage.cost,
     };
   }
 }

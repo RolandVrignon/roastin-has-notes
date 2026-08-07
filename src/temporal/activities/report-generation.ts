@@ -1,16 +1,20 @@
 import { ApplicationFailure } from "@temporalio/activity";
 import { Prisma } from "@/generated/prisma/client";
-import { reportContentSchema, reportSchema, type ParsedConversation, type RoastReport } from "@/domain/report";
+import { generatedReportContentSchema, reportContentSchema, reportSchema, type ParsedConversation, type RoastReport } from "@/domain/report";
+import { isLocale } from "@/i18n/config";
 import { getPrisma } from "@/lib/db";
 import { createFallbackReport } from "@/lib/fallback-report";
 import { formatDateRange } from "@/lib/whatsapp";
+import { fetchUsdToEurRate } from "@/server/billing/generation-cost";
 import { requestStructuredCompletion, isRetryableOpenRouterError } from "@/server/llm/openrouter";
+import { analysisEvidenceIsAnchored, anchorAnalysisEvidence } from "@/server/reports/analysis-evidence";
 import { generationAnalysisSchema, type GenerationAnalysis } from "@/server/reports/generation-schemas";
+import { groundReportContent } from "@/server/reports/report-grounding";
+import { reportLanguageMatches, storedReportLanguageMatches } from "@/server/reports/report-language";
+import { analysisSystemPrompt, writingSystemPrompt } from "@/server/reports/report-prompts";
 import { deleteEphemeralPayload, ephemeralPayloadExists, readEphemeralPayload, type GenerationPayload } from "@/server/storage/ephemeral-payload";
 import { purgeExpiredEphemeralPayloads } from "@/server/storage/ephemeral-payload-cleanup";
 import type { ArtifactReference, LockedGeneration, PublicGenerationStage, ValidatedArtifact } from "@/temporal/types";
-
-const systemPrompt = "You are Roastin, a sharp but affectionate comedy host. Analyse only observable chat behaviours. Never infer sensitive traits, diagnose, shame appearance, expose contact details, or target identity. Ground strong observations in repeated behaviour or supplied evidence. Return only valid JSON matching the schema.";
 
 function nonRetryable(code: string): never {
   throw ApplicationFailure.nonRetryable(code, code);
@@ -35,11 +39,11 @@ function fallbackAnalysis(payload: GenerationPayload): GenerationAnalysis {
   const conversation = toConversation(payload);
   return generationAnalysisSchema.parse({
     participants: conversation.participants.map((participant) => {
-      const examples = conversation.messages.filter((message) => message.author === participant.name && message.body.length > 8).slice(0, 3);
+      const examples = conversation.messages.map((message, messageIndex) => ({ message, messageIndex })).filter(({ message }) => message.author === participant.name && message.body.length > 8).slice(0, 3);
       return {
         ...participant,
         behaviours: [participant.share >= 35 ? "Frequently drives the conversation forward" : "Contributes selectively with distinctive timing"],
-        evidence: examples.map((message) => ({ quote: message.body.slice(0, 160), observation: "A representative example of their recurring contribution style" })),
+        evidence: examples.map(({ message, messageIndex }) => ({ messageIndex, quote: message.body.slice(0, 160), observation: "A representative example of their recurring contribution style" })),
       };
     }),
     recurringPatterns: ["Plans require several follow-ups before becoming concrete", "Humour is used to acknowledge messages without resolving the question"],
@@ -97,25 +101,26 @@ export async function analyzeConversation(reportId: string, payloadReference: st
   const idempotencyKey = `${reportId}:${revision}:analysis:${promptVersion}`;
   try {
     const db = getPrisma();
-    const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, model: true } });
-    if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, model: existing.model ?? undefined };
+    const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, costUsd: true, model: true } });
+    if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, costUsd: Number(existing.costUsd), model: existing.model ?? undefined };
 
+    if (!isLocale(locale)) nonRetryable("REPORT_LOCALE_UNSUPPORTED");
     const payload = await readEphemeralPayload(payloadReference);
-    const transcript = payload.conversation.messages.map(({ author, body, date }) => ({ author, body, date }));
+    const transcript = payload.conversation.messages.map(({ author, body, date }, messageIndex) => ({ messageIndex, author, body, date }));
     const completion = await requestStructuredCompletion({
       schemaName: "roast_conversation_analysis",
       schema: generationAnalysisSchema,
-      system: `${systemPrompt} This is the analysis phase. Identify recurring behaviours and keep evidence concise. Write in locale ${locale}.`,
+      system: analysisSystemPrompt(locale),
       user: JSON.stringify({ chatType: payload.chatType, optionalContext: payload.context, participants: payload.conversation.participants, transcript }),
     });
-    const analysis = completion?.value ?? fallbackAnalysis(payload);
+    const analysis = completion ? anchorAnalysisEvidence(completion.value, payload.conversation.messages, payload.conversation.participants) : fallbackAnalysis(payload);
     const artifact = await db.generationArtifact.upsert({
       where: { idempotencyKey },
-      create: { reportId, revision, kind: "ANALYSIS", idempotencyKey, content: analysis as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens },
+      create: { reportId, revision, kind: "ANALYSIS", idempotencyKey, content: analysis as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens, costUsd: completion?.costUsd ?? 0 },
       update: {},
-      select: { id: true, inputTokens: true, outputTokens: true, model: true },
+      select: { id: true, inputTokens: true, outputTokens: true, costUsd: true, model: true },
     });
-    return { artifactId: artifact.id, inputTokens: artifact.inputTokens ?? undefined, outputTokens: artifact.outputTokens ?? undefined, model: artifact.model ?? undefined };
+    return { artifactId: artifact.id, inputTokens: artifact.inputTokens ?? undefined, outputTokens: artifact.outputTokens ?? undefined, costUsd: Number(artifact.costUsd), model: artifact.model ?? undefined };
   } catch (error) {
     safeFailure("CONVERSATION_ANALYSIS_FAILED", error);
   }
@@ -129,9 +134,8 @@ export async function validateAnalysisArtifact(reportId: string, payloadReferenc
     ]);
     if (!artifact) nonRetryable("ANALYSIS_ARTIFACT_MISSING");
     const analysis = generationAnalysisSchema.parse(artifact.content);
-    const messageBodies = payload.conversation.messages.map((message) => message.body);
     const evidence = analysis.participants.flatMap((participant) => participant.evidence);
-    if (evidence.some((item) => !messageBodies.some((body) => body.includes(item.quote)))) nonRetryable("ANALYSIS_EVIDENCE_INVALID");
+    if (!analysisEvidenceIsAnchored(analysis, payload.conversation.messages, payload.conversation.participants)) nonRetryable("ANALYSIS_EVIDENCE_INVALID");
     return { artifactId, evidenceCount: evidence.length };
   } catch (error) {
     safeFailure("ANALYSIS_VALIDATION_FAILED", error);
@@ -142,8 +146,8 @@ export async function draftReport(reportId: string, payloadReference: string, an
   const idempotencyKey = `${reportId}:${revision}:report:${promptVersion}`;
   try {
     const db = getPrisma();
-    const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, model: true } });
-    if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, model: existing.model ?? undefined };
+    const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, costUsd: true, model: true } });
+    if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, costUsd: Number(existing.costUsd), model: existing.model ?? undefined };
 
     const [analysisArtifact, payload, reportRecord] = await Promise.all([
       db.generationArtifact.findFirst({ where: { id: analysisArtifactId, reportId, kind: "ANALYSIS" }, select: { content: true } }),
@@ -151,16 +155,33 @@ export async function draftReport(reportId: string, payloadReference: string, an
       db.report.findUnique({ where: { id: reportId }, select: { createdAt: true } }),
     ]);
     if (!analysisArtifact || !reportRecord) nonRetryable("REPORT_INPUT_MISSING");
+    if (!isLocale(locale)) nonRetryable("REPORT_LOCALE_UNSUPPORTED");
     const analysis = generationAnalysisSchema.parse(analysisArtifact.content);
     const conversation = toConversation(payload);
-    const completion = await requestStructuredCompletion({
+    let completion = await requestStructuredCompletion({
       schemaName: "roast_report",
-      schema: reportContentSchema,
-      system: `${systemPrompt} This is the writing phase. Produce a warm, specific, shareable report in locale ${locale}.`,
+      schema: generatedReportContentSchema,
+      system: writingSystemPrompt(locale),
       user: JSON.stringify({ chatName: payload.chatName, chatType: payload.chatType, optionalContext: payload.context, analysis }),
     });
+    if (completion && !reportLanguageMatches(completion.value, locale)) {
+      const firstCompletion = completion;
+      const retry = await requestStructuredCompletion({
+        schemaName: "roast_report_language_recovery",
+        schema: generatedReportContentSchema,
+        system: writingSystemPrompt(locale, true),
+        user: JSON.stringify({ chatName: payload.chatName, chatType: payload.chatType, optionalContext: payload.context, analysis }),
+      });
+      if (!retry || !reportLanguageMatches(retry.value, locale)) nonRetryable("REPORT_LANGUAGE_INVALID");
+      completion = {
+        ...retry,
+        inputTokens: (firstCompletion.inputTokens ?? 0) + (retry.inputTokens ?? 0) || undefined,
+        outputTokens: (firstCompletion.outputTokens ?? 0) + (retry.outputTokens ?? 0) || undefined,
+        costUsd: firstCompletion.costUsd + retry.costUsd,
+      };
+    }
     const report = completion ? reportSchema.parse({
-      ...completion.value,
+      ...groundReportContent(completion.value, analysis),
       id: reportId,
       chatName: payload.chatName,
       locale,
@@ -170,11 +191,11 @@ export async function draftReport(reportId: string, payloadReference: string, an
 
     const artifact = await db.generationArtifact.upsert({
       where: { idempotencyKey },
-      create: { reportId, revision, kind: "REPORT", idempotencyKey, content: report as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens },
+      create: { reportId, revision, kind: "REPORT", idempotencyKey, content: report as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens, costUsd: completion?.costUsd ?? 0 },
       update: {},
-      select: { id: true, inputTokens: true, outputTokens: true, model: true },
+      select: { id: true, inputTokens: true, outputTokens: true, costUsd: true, model: true },
     });
-    return { artifactId: artifact.id, inputTokens: artifact.inputTokens ?? undefined, outputTokens: artifact.outputTokens ?? undefined, model: artifact.model ?? undefined };
+    return { artifactId: artifact.id, inputTokens: artifact.inputTokens ?? undefined, outputTokens: artifact.outputTokens ?? undefined, costUsd: Number(artifact.costUsd), model: artifact.model ?? undefined };
   } catch (error) {
     safeFailure("REPORT_DRAFT_FAILED", error);
   }
@@ -185,6 +206,7 @@ export async function validateReportArtifact(reportId: string, artifactId: strin
     const artifact = await getPrisma().generationArtifact.findFirst({ where: { id: artifactId, reportId, kind: "REPORT" }, select: { content: true } });
     if (!artifact) nonRetryable("REPORT_ARTIFACT_MISSING");
     const report = reportSchema.parse(artifact.content);
+    if (!isLocale(report.locale) || !storedReportLanguageMatches(report, report.locale)) nonRetryable("REPORT_LANGUAGE_INVALID");
     const serialized = JSON.stringify(reportContentSchema.parse(report));
     if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(serialized) || /(?<!\w)(?:\+?\d[\s().-]?){8,15}(?!\w)/.test(serialized)) nonRetryable("REPORT_PRIVACY_VALIDATION_FAILED");
     return { artifactId, evidenceCount: report.participants.reduce((total, participant) => total + participant.evidence.length, 0) };
@@ -195,10 +217,36 @@ export async function validateReportArtifact(reportId: string, artifactId: strin
 
 export async function persistReportArtifact(reportId: string, artifactId: string, model?: string) {
   try {
-    const artifact = await getPrisma().generationArtifact.findFirst({ where: { id: artifactId, reportId, kind: "REPORT" }, select: { content: true, model: true } });
+    const db = getPrisma();
+    const artifact = await db.generationArtifact.findFirst({ where: { id: artifactId, reportId, kind: "REPORT" }, select: { content: true, model: true, revision: true } });
     if (!artifact) nonRetryable("REPORT_ARTIFACT_MISSING");
     const report = reportSchema.parse(artifact.content);
-    const result = await getPrisma().report.updateMany({
+    const generationArtifacts = await db.generationArtifact.findMany({ where: { reportId, revision: artifact.revision }, select: { costUsd: true } });
+    const totalCostUsd = generationArtifacts.reduce((total, item) => total.plus(item.costUsd), new Prisma.Decimal(0));
+    let totalCostEur = new Prisma.Decimal(0);
+    let usdToEurRate: Prisma.Decimal | null = null;
+    let exchangeRateDate: Date | null = null;
+    let exchangeRateSource = "not-billed";
+    if (!totalCostUsd.isZero()) {
+      try {
+        const snapshot = await fetchUsdToEurRate();
+        usdToEurRate = new Prisma.Decimal(snapshot.rate);
+        exchangeRateDate = snapshot.date;
+        exchangeRateSource = snapshot.source;
+      } catch {
+        const latest = await db.report.findFirst({
+          where: { usdToEurRate: { not: null }, exchangeRateDate: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000) } },
+          orderBy: { exchangeRateDate: "desc" },
+          select: { usdToEurRate: true, exchangeRateDate: true, exchangeRateSource: true },
+        });
+        if (!latest?.usdToEurRate || !latest.exchangeRateDate) throw new Error("USD_EUR_RATE_UNAVAILABLE");
+        usdToEurRate = latest.usdToEurRate;
+        exchangeRateDate = latest.exchangeRateDate;
+        exchangeRateSource = `last-known:${latest.exchangeRateSource ?? "unknown"}`;
+      }
+      totalCostEur = totalCostUsd.mul(usdToEurRate);
+    }
+    const result = await db.report.updateMany({
       where: { id: reportId, status: "GENERATING", deletedAt: null },
       data: {
         preview: previewFor(report) as Prisma.InputJsonValue,
@@ -207,6 +255,11 @@ export async function persistReportArtifact(reportId: string, artifactId: string
         participantCount: report.stats.participantCount,
         dateRange: report.stats.dateRange,
         model: model ?? artifact.model,
+        generationCostUsd: totalCostUsd,
+        generationCostEur: totalCostEur,
+        usdToEurRate,
+        exchangeRateDate,
+        exchangeRateSource,
         publicErrorCode: null,
       },
     });
@@ -236,7 +289,11 @@ export async function markReportReady(reportId: string) {
 
 export async function markReportFailed(reportId: string, errorCode: string) {
   try {
-    await getPrisma().report.updateMany({ where: { id: reportId, status: "GENERATING", deletedAt: null }, data: { status: "FAILED", generationStage: "FAILED", publicErrorCode: errorCode } });
+    const db = getPrisma();
+    await db.$transaction([
+      db.generationArtifact.deleteMany({ where: { reportId } }),
+      db.report.updateMany({ where: { id: reportId, status: "GENERATING", deletedAt: null }, data: { status: "FAILED", generationStage: "FAILED", publicErrorCode: errorCode } }),
+    ]);
   } catch (error) {
     safeFailure("REPORT_FAILURE_UPDATE_FAILED", error);
   }
@@ -250,25 +307,6 @@ export async function deleteCancelledReport(reportId: string) {
     ]);
   } catch (error) {
     safeFailure("REPORT_DELETE_FAILED", error);
-  }
-}
-
-export async function sendReportReadyNotification(reportId: string) {
-  try {
-    const report = await getPrisma().report.findUnique({ where: { id: reportId }, select: { chatName: true, user: { select: { email: true } } } });
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.EMAIL_FROM;
-    if (!report?.user?.email || !apiKey || !from) return { sent: false };
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: report.user.email, subject: "Your Roastin report is ready", html: `<p>Your private report for <strong>${report.chatName.replace(/[<>&\"']/g, "")}</strong> is ready.</p><p><a href="${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/r/${reportId}">Open your report</a></p>` }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) throw new Error("EMAIL_PROVIDER_FAILED");
-    return { sent: true };
-  } catch (error) {
-    safeFailure("REPORT_NOTIFICATION_FAILED", error);
   }
 }
 

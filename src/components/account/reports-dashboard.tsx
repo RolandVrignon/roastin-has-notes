@@ -49,7 +49,7 @@ export function ReportsDashboard() {
           <section className="card mt-12 p-10 text-center">
             <FileText className="mx-auto text-[#e84b20]" size={40} />
             <h2 className="display mt-5 text-3xl font-black">No reports here yet.</h2>
-            <p className="mt-3 text-[#3b4d5f]">Create one in this browser, or sign in with the email connected to an existing report.</p>
+            <p className="mt-3 text-[#3b4d5f]">Create a report while signed in with your verified WhatsApp number.</p>
             <Link className="btn btn-primary mt-7" href="/create">Roast a chat <ArrowRight size={18} /></Link>
           </section>
         ) : (

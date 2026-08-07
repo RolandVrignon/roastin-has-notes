@@ -6,7 +6,7 @@ export const generationAnalysisSchema = z.object({
     messageCount: z.number().int().nonnegative(),
     share: z.number().min(0).max(100),
     behaviours: z.array(z.string()).min(1).max(5),
-    evidence: z.array(z.object({ quote: z.string(), observation: z.string() })).max(3),
+    evidence: z.array(z.object({ messageIndex: z.number().int().nonnegative(), quote: z.string(), observation: z.string() })).max(3),
   })).min(2),
   recurringPatterns: z.array(z.string()).min(2).max(8),
   groupDynamics: z.array(z.string()).min(2).max(8),

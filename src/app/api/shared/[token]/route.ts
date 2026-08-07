@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { reportSchema } from "@/domain/report";
 import { getPrisma } from "@/lib/db";
+import { classicOfferCodes } from "@/lib/entitlements";
 import { hashSecret } from "@/lib/owner-session";
 import { prepareSharedReport } from "@/lib/shared-report";
 
@@ -11,7 +12,7 @@ export async function GET(_: Request, context: { params: Promise<{ token: string
   try {
     const { token } = paramsSchema.parse(await context.params);
     const link = await getPrisma().shareLink.findFirst({
-      where: { tokenHash: hashSecret(token), revokedAt: null, expiresAt: { gt: new Date() }, report: { deletedAt: null, entitlement: { isNot: null }, status: "READY" } },
+      where: { tokenHash: hashSecret(token), revokedAt: null, expiresAt: { gt: new Date() }, report: { deletedAt: null, entitlements: { some: { offerCode: { in: [...classicOfferCodes] } } }, status: "READY" } },
       include: { report: true },
     });
     if (!link?.report.content) return NextResponse.json({ error: "This share link has expired or was revoked" }, { status: 404 });

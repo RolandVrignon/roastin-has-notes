@@ -43,20 +43,25 @@ services:
       STRIPE_PRICE_CLASSIC_USD: ${STRIPE_PRICE_CLASSIC_USD:-}
       STRIPE_PRICE_CLASSIC_EUR: ${STRIPE_PRICE_CLASSIC_EUR:-}
       STRIPE_PRICE_CLASSIC_BRL: ${STRIPE_PRICE_CLASSIC_BRL:-}
+      STRIPE_PRICE_QUIZ_USD: ${STRIPE_PRICE_QUIZ_USD:-}
+      STRIPE_PRICE_QUIZ_EUR: ${STRIPE_PRICE_QUIZ_EUR:-}
+      STRIPE_PRICE_QUIZ_BRL: ${STRIPE_PRICE_QUIZ_BRL:-}
       ALLOW_DEMO_PAYMENTS: ${ALLOW_DEMO_PAYMENTS:-false}
       DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-production}
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-}
       PHONE_HASH_SECRET: ${PHONE_HASH_SECRET:-}
       AUTH_SECRET: ${AUTH_SECRET:-}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      EMAIL_FROM: ${EMAIL_FROM:-}
       ALLOW_DEV_OTP: ${ALLOW_DEV_OTP:-false}
       WHATSAPP_GRAPH_VERSION: ${WHATSAPP_GRAPH_VERSION:-v26.0}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
       WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
-      WHATSAPP_TEMPLATE_NAME: ${WHATSAPP_TEMPLATE_NAME:-roastin_report_ready}
+      WHATSAPP_AUTH_TEMPLATE_NAME: ${WHATSAPP_AUTH_TEMPLATE_NAME:-roastin_login_code}
+      WHATSAPP_AUTH_TEMPLATE_LANGUAGE: ${WHATSAPP_AUTH_TEMPLATE_LANGUAGE:-en_US}
+      WHATSAPP_REPORT_TEMPLATE_NAME: ${WHATSAPP_REPORT_TEMPLATE_NAME:-roastin_report_ready}
+      WHATSAPP_REPORT_TEMPLATE_LANGUAGE: ${WHATSAPP_REPORT_TEMPLATE_LANGUAGE:-}
+      NEXT_PUBLIC_WHATSAPP_SUPPORT_NUMBER: ${NEXT_PUBLIC_WHATSAPP_SUPPORT_NUMBER:-}
     command: ["sh", "-c", "pnpm exec prisma migrate deploy && exec pnpm start"]
     expose:
       - "3000"
@@ -89,8 +94,6 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-5.6-luna}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      EMAIL_FROM: ${EMAIL_FROM:-}
       TEMPORAL_ADDRESS: temporal-server:7233
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
       TEMPORAL_TASK_QUEUE: ${TEMPORAL_TASK_QUEUE:-report-generation}
@@ -111,6 +114,7 @@ services:
       payload-init:
         condition: service_completed_successfully
     networks:
+      - public
       - private
     security_opt:
       - no-new-privileges:true
@@ -157,9 +161,10 @@ services:
     depends_on:
       temporal-server:
         condition: service_started
-    expose:
-      - "8080"
+    ports:
+      - "127.0.0.1:${TEMPORAL_UI_PORT:-8080}:8080"
     networks:
+      - public
       - private
     security_opt:
       - no-new-privileges:true

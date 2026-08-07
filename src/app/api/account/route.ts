@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
+import { decryptSensitive } from "@/lib/data-encryption";
 import { getPrisma } from "@/lib/db";
+import { maskPhone } from "@/lib/phone";
 import { readUserSession } from "@/lib/user-session";
 import { deleteEphemeralPayload } from "@/server/storage/ephemeral-payload";
 import { requestGenerationDeletion } from "@/temporal/client";
@@ -20,7 +22,8 @@ export async function GET() {
       select: { id: true, amount: true, currency: true, status: true, createdAt: true, report: { select: { id: true, chatName: true, deletedAt: true } } },
     }),
   ]);
-  return NextResponse.json({ email: session.user.email, reportCount, paymentCount: payments.length, purchases: payments }, { headers: { "Cache-Control": "private, no-store" } });
+  const phone = decryptSensitive({ ciphertext: session.user.phoneCiphertext, iv: session.user.phoneIv, tag: session.user.phoneTag });
+  return NextResponse.json({ phone: maskPhone(phone), reportCount, paymentCount: payments.length, purchases: payments }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function DELETE(request: Request) {
@@ -61,7 +64,7 @@ export async function DELETE(request: Request) {
           deletedAt: new Date(),
         },
       });
-      await tx.otpCode.deleteMany({ where: { email: session.user.email } });
+      await tx.otpCode.deleteMany({ where: { phoneHash: session.user.phoneHash } });
       await tx.session.deleteMany({ where: { userId: session.userId } });
       await tx.user.delete({ where: { id: session.userId } });
     }, { isolationLevel: "Serializable" });

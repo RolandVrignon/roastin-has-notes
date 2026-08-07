@@ -4,6 +4,7 @@ import { LocalizedCreateReportFlow } from "@/components/onboarding/localized-cre
 import { getDictionary } from "@/i18n/get-dictionary";
 import { isLocale } from "@/i18n/config";
 import { pageMetadata } from "@/i18n/metadata";
+import { readUserSession } from "@/lib/user-session";
 
 export async function generateMetadata({ params }: PageProps<"/[locale]/create">): Promise<Metadata> {
   const { locale } = await params;
@@ -15,5 +16,5 @@ export async function generateMetadata({ params }: PageProps<"/[locale]/create">
 export default async function LocalizedCreatePage({ params }: PageProps<"/[locale]/create">) {
   const { locale } = await params;
   if (!isLocale(locale)) notFound();
-  return <LocalizedCreateReportFlow dictionary={await getDictionary(locale)} locale={locale} />;
+  return <LocalizedCreateReportFlow dictionary={await getDictionary(locale)} initiallyAuthenticated={Boolean(await readUserSession())} locale={locale} />;
 }

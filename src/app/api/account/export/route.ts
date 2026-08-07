@@ -11,7 +11,9 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     select: {
       id: true, chatName: true, locale: true, status: true, content: true,
-      messageCount: true, participantCount: true, paidAt: true, rawDeletedAt: true, deletedAt: true, createdAt: true,
+      messageCount: true, participantCount: true, model: true, generationCostUsd: true, generationCostEur: true,
+      usdToEurRate: true, exchangeRateDate: true, exchangeRateSource: true,
+      paidAt: true, rawDeletedAt: true, deletedAt: true, createdAt: true,
       payments: { select: { status: true, amount: true, currency: true, createdAt: true } },
       shareLinks: { select: { purpose: true, expiresAt: true, revokedAt: true, createdAt: true } },
       deliveries: { select: { status: true, consentVersion: true, consentAt: true, templateName: true, locale: true, lastStatusAt: true, createdAt: true } },

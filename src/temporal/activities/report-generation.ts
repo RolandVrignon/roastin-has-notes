@@ -5,6 +5,7 @@ import { isLocale } from "@/i18n/config";
 import { getPrisma } from "@/lib/db";
 import { createFallbackReport } from "@/lib/fallback-report";
 import { formatDateRange } from "@/lib/whatsapp";
+import { fetchUsdToEurRate } from "@/server/billing/generation-cost";
 import { requestStructuredCompletion, isRetryableOpenRouterError } from "@/server/llm/openrouter";
 import { analysisEvidenceIsAnchored, anchorAnalysisEvidence } from "@/server/reports/analysis-evidence";
 import { generationAnalysisSchema, type GenerationAnalysis } from "@/server/reports/generation-schemas";
@@ -100,8 +101,8 @@ export async function analyzeConversation(reportId: string, payloadReference: st
   const idempotencyKey = `${reportId}:${revision}:analysis:${promptVersion}`;
   try {
     const db = getPrisma();
-    const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, model: true } });
-    if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, model: existing.model ?? undefined };
+    const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, costUsd: true, model: true } });
+    if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, costUsd: Number(existing.costUsd), model: existing.model ?? undefined };
 
     if (!isLocale(locale)) nonRetryable("REPORT_LOCALE_UNSUPPORTED");
     const payload = await readEphemeralPayload(payloadReference);
@@ -115,11 +116,11 @@ export async function analyzeConversation(reportId: string, payloadReference: st
     const analysis = completion ? anchorAnalysisEvidence(completion.value, payload.conversation.messages, payload.conversation.participants) : fallbackAnalysis(payload);
     const artifact = await db.generationArtifact.upsert({
       where: { idempotencyKey },
-      create: { reportId, revision, kind: "ANALYSIS", idempotencyKey, content: analysis as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens },
+      create: { reportId, revision, kind: "ANALYSIS", idempotencyKey, content: analysis as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens, costUsd: completion?.costUsd ?? 0 },
       update: {},
-      select: { id: true, inputTokens: true, outputTokens: true, model: true },
+      select: { id: true, inputTokens: true, outputTokens: true, costUsd: true, model: true },
     });
-    return { artifactId: artifact.id, inputTokens: artifact.inputTokens ?? undefined, outputTokens: artifact.outputTokens ?? undefined, model: artifact.model ?? undefined };
+    return { artifactId: artifact.id, inputTokens: artifact.inputTokens ?? undefined, outputTokens: artifact.outputTokens ?? undefined, costUsd: Number(artifact.costUsd), model: artifact.model ?? undefined };
   } catch (error) {
     safeFailure("CONVERSATION_ANALYSIS_FAILED", error);
   }
@@ -145,8 +146,8 @@ export async function draftReport(reportId: string, payloadReference: string, an
   const idempotencyKey = `${reportId}:${revision}:report:${promptVersion}`;
   try {
     const db = getPrisma();
-    const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, model: true } });
-    if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, model: existing.model ?? undefined };
+    const existing = await db.generationArtifact.findUnique({ where: { idempotencyKey }, select: { id: true, inputTokens: true, outputTokens: true, costUsd: true, model: true } });
+    if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, costUsd: Number(existing.costUsd), model: existing.model ?? undefined };
 
     const [analysisArtifact, payload, reportRecord] = await Promise.all([
       db.generationArtifact.findFirst({ where: { id: analysisArtifactId, reportId, kind: "ANALYSIS" }, select: { content: true } }),
@@ -176,6 +177,7 @@ export async function draftReport(reportId: string, payloadReference: string, an
         ...retry,
         inputTokens: (firstCompletion.inputTokens ?? 0) + (retry.inputTokens ?? 0) || undefined,
         outputTokens: (firstCompletion.outputTokens ?? 0) + (retry.outputTokens ?? 0) || undefined,
+        costUsd: firstCompletion.costUsd + retry.costUsd,
       };
     }
     const report = completion ? reportSchema.parse({
@@ -189,11 +191,11 @@ export async function draftReport(reportId: string, payloadReference: string, an
 
     const artifact = await db.generationArtifact.upsert({
       where: { idempotencyKey },
-      create: { reportId, revision, kind: "REPORT", idempotencyKey, content: report as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens },
+      create: { reportId, revision, kind: "REPORT", idempotencyKey, content: report as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens, costUsd: completion?.costUsd ?? 0 },
       update: {},
-      select: { id: true, inputTokens: true, outputTokens: true, model: true },
+      select: { id: true, inputTokens: true, outputTokens: true, costUsd: true, model: true },
     });
-    return { artifactId: artifact.id, inputTokens: artifact.inputTokens ?? undefined, outputTokens: artifact.outputTokens ?? undefined, model: artifact.model ?? undefined };
+    return { artifactId: artifact.id, inputTokens: artifact.inputTokens ?? undefined, outputTokens: artifact.outputTokens ?? undefined, costUsd: Number(artifact.costUsd), model: artifact.model ?? undefined };
   } catch (error) {
     safeFailure("REPORT_DRAFT_FAILED", error);
   }
@@ -215,10 +217,36 @@ export async function validateReportArtifact(reportId: string, artifactId: strin
 
 export async function persistReportArtifact(reportId: string, artifactId: string, model?: string) {
   try {
-    const artifact = await getPrisma().generationArtifact.findFirst({ where: { id: artifactId, reportId, kind: "REPORT" }, select: { content: true, model: true } });
+    const db = getPrisma();
+    const artifact = await db.generationArtifact.findFirst({ where: { id: artifactId, reportId, kind: "REPORT" }, select: { content: true, model: true, revision: true } });
     if (!artifact) nonRetryable("REPORT_ARTIFACT_MISSING");
     const report = reportSchema.parse(artifact.content);
-    const result = await getPrisma().report.updateMany({
+    const generationArtifacts = await db.generationArtifact.findMany({ where: { reportId, revision: artifact.revision }, select: { costUsd: true } });
+    const totalCostUsd = generationArtifacts.reduce((total, item) => total.plus(item.costUsd), new Prisma.Decimal(0));
+    let totalCostEur = new Prisma.Decimal(0);
+    let usdToEurRate: Prisma.Decimal | null = null;
+    let exchangeRateDate: Date | null = null;
+    let exchangeRateSource = "not-billed";
+    if (!totalCostUsd.isZero()) {
+      try {
+        const snapshot = await fetchUsdToEurRate();
+        usdToEurRate = new Prisma.Decimal(snapshot.rate);
+        exchangeRateDate = snapshot.date;
+        exchangeRateSource = snapshot.source;
+      } catch {
+        const latest = await db.report.findFirst({
+          where: { usdToEurRate: { not: null }, exchangeRateDate: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000) } },
+          orderBy: { exchangeRateDate: "desc" },
+          select: { usdToEurRate: true, exchangeRateDate: true, exchangeRateSource: true },
+        });
+        if (!latest?.usdToEurRate || !latest.exchangeRateDate) throw new Error("USD_EUR_RATE_UNAVAILABLE");
+        usdToEurRate = latest.usdToEurRate;
+        exchangeRateDate = latest.exchangeRateDate;
+        exchangeRateSource = `last-known:${latest.exchangeRateSource ?? "unknown"}`;
+      }
+      totalCostEur = totalCostUsd.mul(usdToEurRate);
+    }
+    const result = await db.report.updateMany({
       where: { id: reportId, status: "GENERATING", deletedAt: null },
       data: {
         preview: previewFor(report) as Prisma.InputJsonValue,
@@ -227,6 +255,11 @@ export async function persistReportArtifact(reportId: string, artifactId: string
         participantCount: report.stats.participantCount,
         dateRange: report.stats.dateRange,
         model: model ?? artifact.model,
+        generationCostUsd: totalCostUsd,
+        generationCostEur: totalCostEur,
+        usdToEurRate,
+        exchangeRateDate,
+        exchangeRateSource,
         publicErrorCode: null,
       },
     });

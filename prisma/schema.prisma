@@ -98,6 +98,11 @@ model Report {
   participantCount    Int                   @default(0) @map("participant_count")
   dateRange           String?               @map("date_range")
   model               String?
+  generationCostUsd   Decimal?              @map("generation_cost_usd") @db.Decimal(18, 10)
+  generationCostEur   Decimal?              @map("generation_cost_eur") @db.Decimal(18, 10)
+  usdToEurRate        Decimal?              @map("usd_to_eur_rate") @db.Decimal(18, 10)
+  exchangeRateDate    DateTime?             @map("exchange_rate_date") @db.Date
+  exchangeRateSource  String?               @map("exchange_rate_source")
   promptVersion       String                @default("classic-v1") @map("prompt_version")
   paidAt              DateTime?             @map("paid_at")
   rawDeletedAt        DateTime?             @map("raw_deleted_at")
@@ -127,6 +132,7 @@ model GenerationArtifact {
   model          String?
   inputTokens    Int?                   @map("input_tokens")
   outputTokens   Int?                   @map("output_tokens")
+  costUsd        Decimal                @default(0) @map("cost_usd") @db.Decimal(18, 10)
   createdAt      DateTime               @default(now()) @map("created_at")
   report         Report                 @relation(fields: [reportId], references: [id], onDelete: Cascade)
 

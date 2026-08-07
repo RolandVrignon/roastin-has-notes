@@ -25,8 +25,9 @@ describe("OpenRouter structured completions", () => {
       expect(body).not.toHaveProperty("temperature");
       expect(body.provider).toEqual({ data_collection: "deny", require_parameters: true });
       return new Response(JSON.stringify({
+        model: "openai/gpt-5.6-luna-20260801",
         choices: [{ message: { content: '{"ok":true}' } }],
-        usage: { prompt_tokens: 12, completion_tokens: 4 },
+        usage: { prompt_tokens: 12, completion_tokens: 4, cost: 0.00042 },
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -40,10 +41,26 @@ describe("OpenRouter structured completions", () => {
 
     expect(completion).toEqual({
       value: { ok: true },
-      model: "openai/gpt-5.6-luna",
+      model: "openai/gpt-5.6-luna-20260801",
       inputTokens: 12,
       outputTokens: 4,
+      costUsd: 0.00042,
     });
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("refuses an unpriced provider response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ model: "openai/gpt-5.6-luna", choices: [{ message: { content: '{"ok":true}' } }], usage: { prompt_tokens: 12, completion_tokens: 4 } }), { status: 200 })));
+    await expect(requestStructuredCompletion({ schemaName: "health_check", schema: z.object({ ok: z.boolean() }), system: "Return JSON.", user: "Confirm readiness." })).rejects.toThrow("OPENROUTER_COST_MISSING");
+  });
+
+  it("adds the cost of a billed JSON repair attempt", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "provider/model-a", choices: [{ message: { content: '{"ok":"wrong"}' } }], usage: { prompt_tokens: 10, completion_tokens: 3, cost: 0.001 } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "provider/model-b", choices: [{ message: { content: '{"ok":true}' } }], usage: { prompt_tokens: 20, completion_tokens: 4, cost: 0.002 } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const completion = await requestStructuredCompletion({ schemaName: "health_check", schema: z.object({ ok: z.boolean() }), system: "Return JSON.", user: "Confirm readiness." });
+    expect(completion).toMatchObject({ model: "provider/model-b", inputTokens: 30, outputTokens: 7, costUsd: 0.003 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

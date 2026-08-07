@@ -30,4 +30,12 @@ describe("buildPortraitBlocks", () => {
   it("keeps a portrait intact when quotes are hidden", () => {
     expect(buildPortraitBlocks("Un portrait complet.", [])).toEqual([{ type: "text", text: "Un portrait complet." }]);
   });
+
+  it("removes orphan punctuation around a bubble when the portrait omits quote markers", () => {
+    expect(buildPortraitBlocks("Avant — message. Sorry, la suite.", ["«message»"])).toEqual([
+      { type: "text", text: "Avant" },
+      { type: "evidence", evidence: "«message»" },
+      { type: "text", text: "Sorry, la suite." },
+    ]);
+  });
 });

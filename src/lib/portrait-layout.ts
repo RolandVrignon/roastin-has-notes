@@ -14,7 +14,9 @@ type AnchoredEvidence = {
 function cleanText(value: string) {
   const withoutQuoteMarkers = value
     .replace(/[«“"]\s*$/u, "")
-    .replace(/^\s*[»”"][\s.,;:!?…]*/u, "")
+    .replace(/\s*[—–-]\s*$/u, "")
+    .replace(/^\s*[»”"]/u, "")
+    .replace(/^[\s.,;:!?…—–-]+/u, "")
     .trim();
 
   return withoutQuoteMarkers.replace(/^\p{Ll}/u, (letter) => letter.toLocaleUpperCase());

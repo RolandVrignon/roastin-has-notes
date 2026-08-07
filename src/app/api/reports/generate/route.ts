@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     reportId = randomUUID();
     const workflowId = `generate-report-${reportId}`;
     const requestedAt = new Date();
-    const promptVersion = "classic-v1";
+    const promptVersion = "classic-v2";
 
     await getPrisma().report.create({
       data: {

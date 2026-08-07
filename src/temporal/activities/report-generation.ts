@@ -5,6 +5,7 @@ import { getPrisma } from "@/lib/db";
 import { createFallbackReport } from "@/lib/fallback-report";
 import { formatDateRange } from "@/lib/whatsapp";
 import { requestStructuredCompletion, isRetryableOpenRouterError } from "@/server/llm/openrouter";
+import { analysisEvidenceIsAnchored, anchorAnalysisEvidence } from "@/server/reports/analysis-evidence";
 import { generationAnalysisSchema, type GenerationAnalysis } from "@/server/reports/generation-schemas";
 import { deleteEphemeralPayload, ephemeralPayloadExists, readEphemeralPayload, type GenerationPayload } from "@/server/storage/ephemeral-payload";
 import { purgeExpiredEphemeralPayloads } from "@/server/storage/ephemeral-payload-cleanup";
@@ -35,11 +36,11 @@ function fallbackAnalysis(payload: GenerationPayload): GenerationAnalysis {
   const conversation = toConversation(payload);
   return generationAnalysisSchema.parse({
     participants: conversation.participants.map((participant) => {
-      const examples = conversation.messages.filter((message) => message.author === participant.name && message.body.length > 8).slice(0, 3);
+      const examples = conversation.messages.map((message, messageIndex) => ({ message, messageIndex })).filter(({ message }) => message.author === participant.name && message.body.length > 8).slice(0, 3);
       return {
         ...participant,
         behaviours: [participant.share >= 35 ? "Frequently drives the conversation forward" : "Contributes selectively with distinctive timing"],
-        evidence: examples.map((message) => ({ quote: message.body.slice(0, 160), observation: "A representative example of their recurring contribution style" })),
+        evidence: examples.map(({ message, messageIndex }) => ({ messageIndex, quote: message.body.slice(0, 160), observation: "A representative example of their recurring contribution style" })),
       };
     }),
     recurringPatterns: ["Plans require several follow-ups before becoming concrete", "Humour is used to acknowledge messages without resolving the question"],
@@ -101,14 +102,14 @@ export async function analyzeConversation(reportId: string, payloadReference: st
     if (existing) return { artifactId: existing.id, inputTokens: existing.inputTokens ?? undefined, outputTokens: existing.outputTokens ?? undefined, model: existing.model ?? undefined };
 
     const payload = await readEphemeralPayload(payloadReference);
-    const transcript = payload.conversation.messages.map(({ author, body, date }) => ({ author, body, date }));
+    const transcript = payload.conversation.messages.map(({ author, body, date }, messageIndex) => ({ messageIndex, author, body, date }));
     const completion = await requestStructuredCompletion({
       schemaName: "roast_conversation_analysis",
       schema: generationAnalysisSchema,
-      system: `${systemPrompt} This is the analysis phase. Identify recurring behaviours and keep evidence concise. Write in locale ${locale}.`,
+      system: `${systemPrompt} This is the analysis phase. Identify recurring behaviours and keep evidence concise. For every evidence item, return the messageIndex of a transcript message written by that participant. Write in locale ${locale}.`,
       user: JSON.stringify({ chatType: payload.chatType, optionalContext: payload.context, participants: payload.conversation.participants, transcript }),
     });
-    const analysis = completion?.value ?? fallbackAnalysis(payload);
+    const analysis = completion ? anchorAnalysisEvidence(completion.value, payload.conversation.messages) : fallbackAnalysis(payload);
     const artifact = await db.generationArtifact.upsert({
       where: { idempotencyKey },
       create: { reportId, revision, kind: "ANALYSIS", idempotencyKey, content: analysis as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens },
@@ -129,9 +130,8 @@ export async function validateAnalysisArtifact(reportId: string, payloadReferenc
     ]);
     if (!artifact) nonRetryable("ANALYSIS_ARTIFACT_MISSING");
     const analysis = generationAnalysisSchema.parse(artifact.content);
-    const messageBodies = payload.conversation.messages.map((message) => message.body);
     const evidence = analysis.participants.flatMap((participant) => participant.evidence);
-    if (evidence.some((item) => !messageBodies.some((body) => body.includes(item.quote)))) nonRetryable("ANALYSIS_EVIDENCE_INVALID");
+    if (!analysisEvidenceIsAnchored(analysis, payload.conversation.messages)) nonRetryable("ANALYSIS_EVIDENCE_INVALID");
     return { artifactId, evidenceCount: evidence.length };
   } catch (error) {
     safeFailure("ANALYSIS_VALIDATION_FAILED", error);
@@ -236,7 +236,11 @@ export async function markReportReady(reportId: string) {
 
 export async function markReportFailed(reportId: string, errorCode: string) {
   try {
-    await getPrisma().report.updateMany({ where: { id: reportId, status: "GENERATING", deletedAt: null }, data: { status: "FAILED", generationStage: "FAILED", publicErrorCode: errorCode } });
+    const db = getPrisma();
+    await db.$transaction([
+      db.generationArtifact.deleteMany({ where: { reportId } }),
+      db.report.updateMany({ where: { id: reportId, status: "GENERATING", deletedAt: null }, data: { status: "FAILED", generationStage: "FAILED", publicErrorCode: errorCode } }),
+    ]);
   } catch (error) {
     safeFailure("REPORT_FAILURE_UPDATE_FAILED", error);
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisEvidenceIsAnchored, anchorAnalysisEvidence } from "./analysis-evidence";
+import { analysisEvidenceIsAnchored, anchorAnalysisEvidence, evidenceExcerpt } from "./analysis-evidence";
 import { generationAnalysisSchema } from "./generation-schemas";
 
 function analysis() {
@@ -17,6 +17,12 @@ function analysis() {
 }
 
 describe("analysis evidence anchoring", () => {
+  it("shortens long WhatsApp messages at a readable boundary", () => {
+    const excerpt = evidenceExcerpt("word ".repeat(100), 40);
+    expect(excerpt.endsWith("…")).toBe(true);
+    expect(excerpt.length).toBeLessThanOrEqual(40);
+  });
+
   it("replaces model wording with exact source excerpts and repairs invalid references", () => {
     const messages = [
       { author: "Maya", body: "Dinner on Friday? I can book the table." },

@@ -8,6 +8,7 @@ import { hasMinorSignal, sanitizeConversation } from "@/lib/privacy";
 import { readUserSession } from "@/lib/user-session";
 import { formatDateRange, parseWhatsApp } from "@/lib/whatsapp";
 import { createEphemeralPayload, deleteEphemeralPayload } from "@/server/storage/ephemeral-payload";
+import { CLASSIC_PROMPT_VERSION } from "@/server/reports/report-prompts";
 import { startGenerateReportWorkflow } from "@/temporal/client";
 
 export const runtime = "nodejs";
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     reportId = randomUUID();
     const workflowId = `generate-report-${reportId}`;
     const requestedAt = new Date();
-    const promptVersion = "classic-v2";
+    const promptVersion = CLASSIC_PROMPT_VERSION;
 
     await getPrisma().report.create({
       data: {

@@ -3,6 +3,14 @@ import type { GenerationAnalysis } from "./generation-schemas";
 type SourceMessage = { author: string; body: string };
 type SourceParticipant = { name: string; messageCount: number; share: number };
 
+export function evidenceExcerpt(value: string, maximumLength = 280) {
+  if (value.length <= maximumLength) return value;
+  const candidate = value.slice(0, maximumLength - 1);
+  const lastBoundary = Math.max(candidate.lastIndexOf(" "), candidate.lastIndexOf("\n"));
+  const excerpt = lastBoundary >= Math.floor(maximumLength * 0.7) ? candidate.slice(0, lastBoundary) : candidate;
+  return `${excerpt.trimEnd()}…`;
+}
+
 export function anchorAnalysisEvidence(analysis: GenerationAnalysis, messages: SourceMessage[], sourceParticipants: SourceParticipant[]): GenerationAnalysis {
   return {
     ...analysis,
@@ -13,7 +21,7 @@ export function anchorAnalysisEvidence(analysis: GenerationAnalysis, messages: S
         const source = messages[item.messageIndex];
         if (!source || source.author !== sourceParticipant.name || seen.has(item.messageIndex)) return [];
         seen.add(item.messageIndex);
-        return [{ ...item, quote: source.body.slice(0, 160) }];
+        return [{ ...item, quote: evidenceExcerpt(source.body) }];
       });
       const behaviours = participant?.behaviours.length ? participant.behaviours : [sourceParticipant.share >= 35 ? "Frequently drives the conversation forward" : "Contributes selectively with distinctive timing"];
       if (evidence.length) return { ...sourceParticipant, behaviours, evidence };
@@ -25,7 +33,7 @@ export function anchorAnalysisEvidence(analysis: GenerationAnalysis, messages: S
         behaviours,
         evidence: [{
           messageIndex: fallbackIndex,
-          quote: messages[fallbackIndex].body.slice(0, 160),
+          quote: evidenceExcerpt(messages[fallbackIndex].body),
           observation: "A representative example of their contribution style",
         }],
       };
@@ -40,7 +48,7 @@ export function analysisEvidenceIsAnchored(analysis: GenerationAnalysis, message
     if (!sourceParticipant || participant.name !== sourceParticipant.name || participant.messageCount !== sourceParticipant.messageCount || participant.share !== sourceParticipant.share) return false;
     return participant.evidence.every((item) => {
     const source = messages[item.messageIndex];
-    return source?.author === participant.name && item.quote === source.body.slice(0, 160);
+    return source?.author === participant.name && item.quote === evidenceExcerpt(source.body);
     });
   });
 }

@@ -52,7 +52,7 @@ export function createFallbackReport(conversation: ParsedConversation, chatName:
     ...participant,
     title: copy.titles[index % copy.titles.length],
     portrait: copy.portrait(participant.name, participant.share, index === 0),
-    evidence: conversation.messages.filter((message) => message.author === participant.name && message.body.length > 12).slice(0, 2).map((message) => message.body.slice(0, 120)),
+    evidence: conversation.messages.filter((message) => message.author === participant.name && message.body.length > 12).slice(0, 2).map((message) => `«${message.body.slice(0, 120)}»`),
     finalLine: index === 0 ? copy.firstLine : copy.otherLine,
   }));
   return {

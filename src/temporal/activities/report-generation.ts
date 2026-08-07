@@ -7,11 +7,11 @@ import { formatDateRange } from "@/lib/whatsapp";
 import { requestStructuredCompletion, isRetryableOpenRouterError } from "@/server/llm/openrouter";
 import { analysisEvidenceIsAnchored, anchorAnalysisEvidence } from "@/server/reports/analysis-evidence";
 import { generationAnalysisSchema, type GenerationAnalysis } from "@/server/reports/generation-schemas";
+import { groundReportContent } from "@/server/reports/report-grounding";
+import { analysisSystemPrompt, writingSystemPrompt } from "@/server/reports/report-prompts";
 import { deleteEphemeralPayload, ephemeralPayloadExists, readEphemeralPayload, type GenerationPayload } from "@/server/storage/ephemeral-payload";
 import { purgeExpiredEphemeralPayloads } from "@/server/storage/ephemeral-payload-cleanup";
 import type { ArtifactReference, LockedGeneration, PublicGenerationStage, ValidatedArtifact } from "@/temporal/types";
-
-const systemPrompt = "You are Roastin, a sharp but affectionate comedy host. Analyse only observable chat behaviours. Never infer sensitive traits, diagnose, shame appearance, expose contact details, or target identity. Ground strong observations in repeated behaviour or supplied evidence. Return only valid JSON matching the schema.";
 
 function nonRetryable(code: string): never {
   throw ApplicationFailure.nonRetryable(code, code);
@@ -106,7 +106,7 @@ export async function analyzeConversation(reportId: string, payloadReference: st
     const completion = await requestStructuredCompletion({
       schemaName: "roast_conversation_analysis",
       schema: generationAnalysisSchema,
-      system: `${systemPrompt} This is the analysis phase. Identify recurring behaviours and keep evidence concise. For every evidence item, return the messageIndex of a transcript message written by that participant. Write in locale ${locale}.`,
+      system: analysisSystemPrompt(locale),
       user: JSON.stringify({ chatType: payload.chatType, optionalContext: payload.context, participants: payload.conversation.participants, transcript }),
     });
     const analysis = completion ? anchorAnalysisEvidence(completion.value, payload.conversation.messages, payload.conversation.participants) : fallbackAnalysis(payload);
@@ -156,11 +156,11 @@ export async function draftReport(reportId: string, payloadReference: string, an
     const completion = await requestStructuredCompletion({
       schemaName: "roast_report",
       schema: reportContentSchema,
-      system: `${systemPrompt} This is the writing phase. Produce a warm, specific, shareable report in locale ${locale}.`,
+      system: writingSystemPrompt(locale),
       user: JSON.stringify({ chatName: payload.chatName, chatType: payload.chatType, optionalContext: payload.context, analysis }),
     });
     const report = completion ? reportSchema.parse({
-      ...completion.value,
+      ...groundReportContent(completion.value, analysis),
       id: reportId,
       chatName: payload.chatName,
       locale,

@@ -63,7 +63,7 @@ const dictionary = {
       choose: "Choose your .txt or .zip export", limits: "Maximum 2 MB · No media files", messages: "messages", participants: "participants",
       replace: "Choose a different file", privacy: "Original chat discarded after generation", sample: "Try the sample chat instead",
     },
-    review: { eyebrow: "Cast of characters", title: "Make sure we got the room right.", text: "Use first names or nicknames. These are the names that will appear in your report.", chatName: "Chat name" },
+    review: { eyebrow: "Cast of characters", title: "Make sure we got the room right.", text: "Use first names or nicknames. These are the names that will appear in your report.", chatName: "Chat name", participantName: "Display name", invalidNames: "Each participant needs a unique first name or nickname." },
     launch: {
       ready: "Roastin is ready for", messages: "messages", protagonists: "protagonists", warning: "Absolutely no idea what they are about to learn.",
       cards: ["Patterns", "Portraits", "Verdict"],

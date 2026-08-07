@@ -44,6 +44,7 @@ export function CreateReportFlow() {
   const [chatName, setChatName] = useState("The Usual Suspects");
   const [rawText, setRawText] = useState("");
   const [fileName, setFileName] = useState("");
+  const [participantNames, setParticipantNames] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmedAdult, setConfirmedAdult] = useState(false);
@@ -82,12 +83,15 @@ export function CreateReportFlow() {
     }
     setRawText(text);
     setFileName(file.name);
+    setParticipantNames(Object.fromEntries(result.participants.map(({ name }) => [name, name])));
   }
 
   function useSample() {
+    const sample = parseWhatsApp(sampleChat);
     setRawText(sampleChat);
     setFileName("lisbon-planning-committee.txt");
     setChatName("The Lisbon Planning Committee");
+    setParticipantNames(Object.fromEntries(sample.participants.map(({ name }) => [name, name])));
     setError("");
   }
 
@@ -96,10 +100,11 @@ export function CreateReportFlow() {
     setLoading(true);
     setError("");
     try {
+      const participantAliases = parsed?.participants.map(({ name }) => ({ sourceName: name, displayName: (participantNames[name] ?? name).trim() })) ?? [];
       const response = await fetch("/api/reports/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatName, chatType, context, locale: "en", rawText }),
+        body: JSON.stringify({ chatName, chatType, context, locale: "en", participantAliases, rawText }),
       });
       const payload = await response.json() as { reportId?: string; error?: string };
       if (!response.ok || !payload.reportId) throw new Error(payload.error ?? "Report generation failed");
@@ -113,7 +118,11 @@ export function CreateReportFlow() {
 
   function canContinue() {
     if (step === 3) return Boolean(rawText && parsed && parsed.messages.length >= 8);
-    if (step === 4) return chatName.trim().length > 0;
+    if (step === 4) {
+      const names = parsed?.participants.map(({ name }) => (participantNames[name] ?? name).trim()) ?? [];
+      return chatName.trim().length > 0 && names.every((name) => name.length > 0 && name.length <= 40)
+        && new Set(names.map((name) => name.toLocaleLowerCase("en"))).size === names.length;
+    }
     return true;
   }
 
@@ -136,7 +145,7 @@ export function CreateReportFlow() {
           {step === 1 && <ChatTypeStep value={chatType} onChange={setChatType} />}
           {step === 2 && <ContextStep value={context} onChange={setContext} />}
           {step === 3 && <UploadStep error={error} fileName={fileName} inputRef={fileRef} onFile={readFile} onSample={useSample} parsed={parsed} />}
-          {step === 4 && <ReviewStep chatName={chatName} onChatName={setChatName} parsed={parsed} />}
+          {step === 4 && <ReviewStep chatName={chatName} onChatName={setChatName} onParticipantName={(sourceName, displayName) => setParticipantNames((current) => ({ ...current, [sourceName]: displayName }))} parsed={parsed} participantNames={participantNames} />}
           {step === 5 && <LaunchStep chatName={chatName} confirmedAdult={confirmedAdult} loading={loading} onConfirmedAdult={setConfirmedAdult} parsed={parsed} />}
         </section>
 
@@ -170,8 +179,10 @@ function UploadStep({ error, fileName, inputRef, onFile, onSample, parsed }: { e
   return <><StepTitle eyebrow="The receipts" title="Drop your WhatsApp export." text="Choose the .txt file or .zip archive from an export without media. Parsing happens in your browser before anything is sent." />{parsed ? <div className="rounded-3xl border-2 border-[#112b4d] bg-[#f8efd9] p-6 shadow-[6px_7px_0_#112b4d]"><div className="flex items-center gap-4"><span className="grid size-12 place-items-center rounded-xl bg-[#a9c9a9]"><FileArchive size={23} /></span><div className="min-w-0"><strong className="block truncate">{fileName}</strong><span className="text-sm text-[#3b4d5f]">{parsed.messages.length.toLocaleString()} messages · {parsed.participants.length} participants</span></div><Check className="ml-auto text-[#e84b20]" strokeWidth={3} /></div><button className="mt-5 text-sm font-black text-[#e84b20] underline" onClick={() => inputRef.current?.click()} type="button">Choose a different file</button></div> : <button className="group flex min-h-64 w-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[#112b4d]/35 bg-[#f8efd9]/50 p-8 text-center hover:border-[#e84b20] hover:bg-[#f8efd9]" onClick={() => inputRef.current?.click()} type="button"><span className="grid size-16 place-items-center rounded-2xl bg-[#e84b20] text-white shadow-[4px_5px_0_#112b4d] transition-transform group-hover:-translate-y-1"><Upload size={28} /></span><strong className="mt-6 text-lg">Choose your .txt or .zip export</strong><span className="mt-2 text-sm text-[#3b4d5f]">Maximum 2 MB · No media files</span></button>}<input accept=".txt,.zip,text/plain,application/zip" className="hidden" onChange={(event) => event.target.files?.[0] && onFile(event.target.files[0])} ref={inputRef} type="file" />{error && <p className="mt-4 rounded-xl bg-red-50 p-4 text-sm font-bold text-red-800">{error}</p>}<div className="mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row"><span className="flex items-center gap-2 text-xs font-bold text-[#3b4d5f]"><LockKeyhole size={15} /> Original chat deleted after generation</span><button className="text-sm font-black text-[#e84b20] underline" onClick={onSample} type="button">Try the sample chat instead</button></div></>;
 }
 
-function ReviewStep({ chatName, onChatName, parsed }: { chatName: string; onChatName: (value: string) => void; parsed: ReturnType<typeof parseWhatsApp> | null }) {
-  return <><StepTitle eyebrow="Cast of characters" title="Make sure we got the room right." text="Use first names or nicknames. These are the names that will appear in your report." /><label className="text-xs font-black uppercase tracking-[.13em] text-[#3b4d5f]">Chat name<input className="mt-2 block w-full rounded-2xl border-2 border-[#112b4d]/20 bg-white px-5 py-4 text-lg font-bold outline-none focus:border-[#e84b20]" maxLength={80} onChange={(event) => onChatName(event.target.value)} value={chatName} /></label><div className="mt-7 space-y-3">{parsed?.participants.map((participant, index) => <div className="flex items-center gap-4 rounded-2xl border border-[#112b4d]/15 bg-white p-4" key={participant.name}><span className={`grid size-10 place-items-center rounded-full font-black ${["bg-[#f6a913]", "bg-[#a9c9a9]", "bg-[#e84b20] text-white"][index % 3]}`}>{participant.name.charAt(0).toUpperCase()}</span><strong>{participant.name}</strong><span className="ml-auto text-sm font-bold text-[#3b4d5f]">{participant.messageCount.toLocaleString()} · {participant.share}%</span></div>)}</div></>;
+function ReviewStep({ chatName, onChatName, onParticipantName, parsed, participantNames }: { chatName: string; onChatName: (value: string) => void; onParticipantName: (sourceName: string, displayName: string) => void; parsed: ReturnType<typeof parseWhatsApp> | null; participantNames: Record<string, string> }) {
+  const names = parsed?.participants.map(({ name }) => (participantNames[name] ?? name).trim()) ?? [];
+  const valid = names.every((name) => name.length > 0 && name.length <= 40) && new Set(names.map((name) => name.toLocaleLowerCase("en"))).size === names.length;
+  return <><StepTitle eyebrow="Cast of characters" title="Make sure we got the room right." text="Use first names or nicknames. These are the names that will appear in your report." /><label className="text-xs font-black uppercase tracking-[.13em] text-[#3b4d5f]">Chat name<input className="mt-2 block w-full rounded-2xl border-2 border-[#112b4d]/20 bg-white px-5 py-4 text-lg font-bold outline-none focus:border-[#e84b20]" maxLength={80} onChange={(event) => onChatName(event.target.value)} value={chatName} /></label><div className="mt-7 space-y-3">{parsed?.participants.map((participant, index) => { const displayName = participantNames[participant.name] ?? participant.name; return <label className="flex items-center gap-4 rounded-2xl border border-[#112b4d]/15 bg-white p-4" key={participant.name}><span className={`grid size-10 shrink-0 place-items-center rounded-full font-black ${["bg-[#f6a913]", "bg-[#a9c9a9]", "bg-[#e84b20] text-white"][index % 3]}`}>{(displayName || participant.name).charAt(0).toUpperCase()}</span><span className="sr-only">Display name for {participant.name}</span><input aria-label={`Display name for ${participant.name}`} className="min-w-0 flex-1 rounded-xl border border-[#112b4d]/15 bg-[#fffaf0] px-3 py-2 font-black outline-none focus:border-[#e84b20]" maxLength={40} onChange={(event) => onParticipantName(participant.name, event.target.value)} value={displayName} /><span className="shrink-0 text-sm font-bold text-[#3b4d5f]">{participant.messageCount.toLocaleString()} · {participant.share}%</span></label>; })}</div>{parsed && !valid && <p className="mt-4 rounded-xl bg-red-50 p-4 text-sm font-bold text-red-800">Each participant needs a unique first name or nickname.</p>}</>;
 }
 
 function LaunchStep({ chatName, confirmedAdult, loading, onConfirmedAdult, parsed }: { chatName: string; confirmedAdult: boolean; loading: boolean; onConfirmedAdult: (value: boolean) => void; parsed: ReturnType<typeof parseWhatsApp> | null }) {

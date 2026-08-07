@@ -78,7 +78,7 @@ export type Dictionary = {
       privacy: string;
       sample: string;
     };
-    review: { eyebrow: string; title: string; text: string; chatName: string };
+    review: { eyebrow: string; title: string; text: string; chatName: string; participantName: string; invalidNames: string };
     launch: {
       ready: string;
       messages: string;

@@ -109,7 +109,7 @@ export async function analyzeConversation(reportId: string, payloadReference: st
       system: `${systemPrompt} This is the analysis phase. Identify recurring behaviours and keep evidence concise. For every evidence item, return the messageIndex of a transcript message written by that participant. Write in locale ${locale}.`,
       user: JSON.stringify({ chatType: payload.chatType, optionalContext: payload.context, participants: payload.conversation.participants, transcript }),
     });
-    const analysis = completion ? anchorAnalysisEvidence(completion.value, payload.conversation.messages) : fallbackAnalysis(payload);
+    const analysis = completion ? anchorAnalysisEvidence(completion.value, payload.conversation.messages, payload.conversation.participants) : fallbackAnalysis(payload);
     const artifact = await db.generationArtifact.upsert({
       where: { idempotencyKey },
       create: { reportId, revision, kind: "ANALYSIS", idempotencyKey, content: analysis as Prisma.InputJsonValue, model: completion?.model ?? "deterministic-development-fallback", inputTokens: completion?.inputTokens, outputTokens: completion?.outputTokens },
@@ -131,7 +131,7 @@ export async function validateAnalysisArtifact(reportId: string, payloadReferenc
     if (!artifact) nonRetryable("ANALYSIS_ARTIFACT_MISSING");
     const analysis = generationAnalysisSchema.parse(artifact.content);
     const evidence = analysis.participants.flatMap((participant) => participant.evidence);
-    if (!analysisEvidenceIsAnchored(analysis, payload.conversation.messages)) nonRetryable("ANALYSIS_EVIDENCE_INVALID");
+    if (!analysisEvidenceIsAnchored(analysis, payload.conversation.messages, payload.conversation.participants)) nonRetryable("ANALYSIS_EVIDENCE_INVALID");
     return { artifactId, evidenceCount: evidence.length };
   } catch (error) {
     safeFailure("ANALYSIS_VALIDATION_FAILED", error);

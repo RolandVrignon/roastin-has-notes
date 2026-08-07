@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPrisma } from "@/lib/db";
 import { getOrCreateOwnerSession, ownerCookie } from "@/lib/owner-session";
+import { applyParticipantAliases, ParticipantAliasError } from "@/lib/participant-aliases";
 import { hasMinorSignal, sanitizeConversation } from "@/lib/privacy";
 import { readUserSession } from "@/lib/user-session";
 import { formatDateRange, parseWhatsApp } from "@/lib/whatsapp";
@@ -16,6 +17,7 @@ const inputSchema = z.object({
   locale: z.string().trim().min(2).max(10).default("en"),
   chatType: z.enum(["partner", "friends", "best-friend", "family", "work", "other"]),
   context: z.string().trim().max(500).optional(),
+  participantAliases: z.array(z.object({ sourceName: z.string().trim().min(1).max(80), displayName: z.string().trim().min(1).max(40) })).max(100).default([]),
   rawText: z.string().min(40).max(2_000_000),
 });
 
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
     }
     if (hasMinorSignal(parsed)) return NextResponse.json({ error: "Roastin cannot analyse conversations that appear to involve minors." }, { status: 422 });
 
-    const sanitized = sanitizeConversation(parsed);
+    const sanitized = sanitizeConversation(applyParticipantAliases(parsed, input.participantAliases));
     const owner = await getOrCreateOwnerSession();
     const payload = await createEphemeralPayload({
       chatName: input.chatName,
@@ -92,6 +94,7 @@ export async function POST(request: Request) {
       }).catch(() => undefined);
     }
     if (error instanceof z.ZodError) return NextResponse.json({ error: error.issues[0]?.message ?? "Invalid conversation" }, { status: 400 });
+    if (error instanceof ParticipantAliasError) return NextResponse.json({ error: "Participant names must be unique and match the imported conversation" }, { status: 400 });
     return NextResponse.json({ error: "The report could not be queued. Please try again." }, { status: 503 });
   }
 }
